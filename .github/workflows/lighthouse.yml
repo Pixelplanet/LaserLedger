@@ -1,0 +1,51 @@
+name: Lighthouse CI
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install deps
+        run: |
+          npm ci
+          npm --prefix client install
+
+      - name: Build client
+        run: npm --prefix client run build
+
+      - name: Start preview server
+        run: |
+          npm --prefix client run preview -- --host 127.0.0.1 --port 4173 &
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:4173 >/dev/null && exit 0
+            sleep 1
+          done
+          echo "Preview server did not start in time" >&2
+          exit 1
+
+      - name: Lighthouse audit
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          urls: |
+            http://127.0.0.1:4173/
+            http://127.0.0.1:4173/search
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+          configPath: ./lighthouserc.json
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: false
+        timeout-minutes: 10

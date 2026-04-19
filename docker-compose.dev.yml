@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: laserledger
+      MYSQL_USER: laserledger
+      MYSQL_PASSWORD: laserledger
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      APP_BASE_URL: http://localhost:3000
+      JWT_SECRET: dev-secret-change-me
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: laserledger
+      DB_USER: laserledger
+      DB_PASSWORD: laserledger
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_INITIAL_PASSWORD: Admin1234!
+      UPLOAD_DIR: /app/uploads
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads_data:/app/uploads
+
+volumes:
+  mysql_data:
+  uploads_data:
