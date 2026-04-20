@@ -145,15 +145,15 @@ jobs:
           api() {
             local method=$1 path=$2; shift 2
             local url="$PORTAINER_URL/api$path"
-            echo ">> $method $url"
+            echo ">> $method $url" >&2
             local response http_code
             response=$(curl -sS -w "\n%{http_code}" -X "$method" "$url" \
               -H "X-API-Key: $PORTAINER_API_KEY" "$@")
             http_code=$(echo "$response" | tail -1)
             response=$(echo "$response" | sed '$d')
             if [ "$http_code" -ge 400 ]; then
-              echo "::error::HTTP $http_code from $method $url"
-              echo "Response body: $response"
+              echo "::error::HTTP $http_code from $method $url" >&2
+              echo "Response body: $response" >&2
               return 1
             fi
             echo "$response"
