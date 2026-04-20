@@ -131,15 +131,14 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Redeploy test stack via Portainer
+      - name: Redeploy laserledger-test via Portainer
         env:
           PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-          STACK_NAME: lasertools_test
+          IMAGE: pixelplanet/laserledger:latest
+          CONTAINER_NAME: laserledger-test
         run: |
           set -euo pipefail
-
-          # Strip trailing slash from URL
           PORTAINER_URL="${PORTAINER_URL%/}"
 
           api() {
@@ -160,38 +159,55 @@ jobs:
           }
 
           # Find the endpoint ID
-          ENDPOINT_ID=$(api GET /endpoints | jq '.[0].Id')
-          echo "Endpoint ID: $ENDPOINT_ID"
+          EID=$(api GET /endpoints | jq '.[0].Id')
+          echo "Endpoint ID: $EID"
+          DOCKER="/endpoints/$EID/docker"
 
-          # Find the test stack by name
-          STACK_ID=$(api GET /stacks | jq --arg name "$STACK_NAME" \
-            '[.[] | select(.Name == $name)][0].Id')
-          echo "Stack ID: $STACK_ID"
+          # Pull the latest image
+          echo "Pulling $IMAGE..."
+          api POST "$DOCKER/images/create?fromImage=${IMAGE%%:*}&tag=${IMAGE##*:}" \
+            > /dev/null
 
-          if [ -z "$STACK_ID" ] || [ "$STACK_ID" = "null" ]; then
-            echo "::error::Stack '$STACK_NAME' not found in Portainer"
-            echo "Available stacks:"
-            api GET /stacks | jq '.[].Name'
+          # Find the running container by name
+          CONTAINER_ID=$(api GET "$DOCKER/containers/json?all=true" \
+            | jq -r --arg name "/$CONTAINER_NAME" \
+              '.[] | select(.Names[] == $name) | .Id')
+
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "::error::Container '$CONTAINER_NAME' not found"
             exit 1
           fi
+          echo "Container: $CONTAINER_ID"
 
-          # Get current stack details and build redeploy body in one jq pass
-          # Write to temp file to avoid all shell escaping issues with YAML content
+          # Get current container config for recreation
+          INSPECT=$(api GET "$DOCKER/containers/$CONTAINER_ID/json")
+
+          # Stop and remove old container
+          echo "Stopping $CONTAINER_NAME..."
+          api POST "$DOCKER/containers/$CONTAINER_ID/stop" > /dev/null 2>&1 || true
+          api DELETE "$DOCKER/containers/$CONTAINER_ID" > /dev/null
+
+          # Recreate with same config but new image
+          CREATE_BODY=$(echo "$INSPECT" | jq --arg img "$IMAGE" '{
+            Image: $img,
+            Env: .Config.Env,
+            ExposedPorts: .Config.ExposedPorts,
+            Labels: .Config.Labels,
+            Volumes: .Config.Volumes,
+            HostConfig: .HostConfig,
+            NetworkingConfig: {
+              EndpointsConfig: .NetworkSettings.Networks
+            },
+            Healthcheck: .Config.Healthcheck
+          }')
           TMPBODY=$(mktemp)
-          api GET "/stacks/$STACK_ID" | jq '{
-            stackFileContent: .StackFileContent,
-            env: .Env,
-            prune: false,
-            pullImage: true
-          }' > "$TMPBODY"
+          echo "$CREATE_BODY" > "$TMPBODY"
 
-          echo "Body preview (first 200 chars):" >&2
-          head -c 200 "$TMPBODY" >&2
-          echo "" >&2
-
-          RESPONSE=$(api PUT "/stacks/$STACK_ID?endpointId=$ENDPOINT_ID" \
-            -H "Content-Type: application/json" -d @"$TMPBODY")
+          NEW_ID=$(api POST "$DOCKER/containers/create?name=$CONTAINER_NAME" \
+            -H "Content-Type: application/json" -d @"$TMPBODY" | jq -r '.Id')
           rm -f "$TMPBODY"
-          echo "Redeploy response: $(echo "$RESPONSE" | jq -r '.Name // "OK"')"
+          echo "Created: $NEW_ID"
 
-          echo "Test stack '$STACK_NAME' redeployed successfully"
+          # Start the new container
+          api POST "$DOCKER/containers/$NEW_ID/start" > /dev/null
+          echo "Container '$CONTAINER_NAME' redeployed successfully"
