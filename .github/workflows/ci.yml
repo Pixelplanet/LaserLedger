@@ -88,9 +88,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Compute lowercase image name
+        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -104,6 +108,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -112,6 +123,8 @@ jobs:
           tags: |
             pixelplanet/laserledger:latest
             pixelplanet/laserledger:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
 
   deploy-test:
     needs: [docker-publish]
@@ -125,6 +138,9 @@ jobs:
           STACK_NAME: lasertools_test
         run: |
           set -euo pipefail
+
+          # Strip trailing slash from URL
+          PORTAINER_URL="${PORTAINER_URL%/}"
 
           api() {
             local method=$1 path=$2; shift 2
