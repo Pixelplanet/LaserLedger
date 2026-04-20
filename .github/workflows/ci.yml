@@ -175,19 +175,23 @@ jobs:
             exit 1
           fi
 
-          # Get current stack details (compose file + env vars)
-          STACK_DETAIL=$(api GET "/stacks/$STACK_ID")
-          STACK_FILE=$(echo "$STACK_DETAIL" | jq -r '.StackFileContent')
-          STACK_ENV=$(echo "$STACK_DETAIL" | jq '.Env')
+          # Get current stack details and build redeploy body in one jq pass
+          # Write to temp file to avoid all shell escaping issues with YAML content
+          TMPBODY=$(mktemp)
+          api GET "/stacks/$STACK_ID" | jq '{
+            stackFileContent: .StackFileContent,
+            env: .Env,
+            prune: false,
+            pullImage: true
+          }' > "$TMPBODY"
 
-          # Redeploy with pullImage to get the new image
-          BODY=$(jq -n \
-            --arg file "$STACK_FILE" \
-            --argjson env "$STACK_ENV" \
-            '{stackFileContent: $file, env: $env, prune: false, pullImage: true}')
+          echo "Body preview (first 200 chars):" >&2
+          head -c 200 "$TMPBODY" >&2
+          echo "" >&2
 
           RESPONSE=$(api PUT "/stacks/$STACK_ID?endpointId=$ENDPOINT_ID" \
-            -H "Content-Type: application/json" -d "$BODY")
+            -H "Content-Type: application/json" -d @"$TMPBODY")
+          rm -f "$TMPBODY"
           echo "Redeploy response: $(echo "$RESPONSE" | jq -r '.Name // "OK"')"
 
           echo "Test stack '$STACK_NAME' redeployed successfully"
