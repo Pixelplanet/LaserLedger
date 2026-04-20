@@ -112,3 +112,52 @@ jobs:
           tags: |
             pixelplanet/laserledger:latest
             pixelplanet/laserledger:${{ github.sha }}
+
+  deploy-test:
+    needs: [docker-publish]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Redeploy test stack via Portainer
+        env:
+          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+          STACK_NAME: lasertools-test
+        run: |
+          set -euo pipefail
+
+          # Find the endpoint ID
+          ENDPOINT_ID=$(curl -sfS "$PORTAINER_URL/api/endpoints" \
+            -H "X-API-Key: $PORTAINER_API_KEY" | jq '.[0].Id')
+          echo "Endpoint ID: $ENDPOINT_ID"
+
+          # Find the test stack by name
+          STACK_JSON=$(curl -sfS "$PORTAINER_URL/api/stacks" \
+            -H "X-API-Key: $PORTAINER_API_KEY" | jq --arg name "$STACK_NAME" '.[] | select(.Name == $name)')
+
+          STACK_ID=$(echo "$STACK_JSON" | jq '.Id')
+          echo "Stack ID: $STACK_ID"
+
+          if [ -z "$STACK_ID" ] || [ "$STACK_ID" = "null" ]; then
+            echo "::error::Stack '$STACK_NAME' not found in Portainer"
+            exit 1
+          fi
+
+          # Get current stack details (compose file + env vars)
+          STACK_DETAIL=$(curl -sfS "$PORTAINER_URL/api/stacks/$STACK_ID" \
+            -H "X-API-Key: $PORTAINER_API_KEY")
+
+          STACK_FILE=$(echo "$STACK_DETAIL" | jq -r '.StackFileContent')
+          STACK_ENV=$(echo "$STACK_DETAIL" | jq '.Env')
+
+          # Redeploy with pullImage to get the new image
+          curl -sfS -X PUT "$PORTAINER_URL/api/stacks/$STACK_ID?endpointId=$ENDPOINT_ID" \
+            -H "X-API-Key: $PORTAINER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg file "$STACK_FILE" \
+              --argjson env "$STACK_ENV" \
+              '{stackFileContent: $file, env: $env, prune: false, pullImage: true}')" \
+            -o /dev/null -w "HTTP %{http_code}\n"
+
+          echo "Test stack '$STACK_NAME' redeployed successfully"
