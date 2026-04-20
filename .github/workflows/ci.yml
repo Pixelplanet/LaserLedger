@@ -184,8 +184,10 @@ jobs:
 
           # Stop and remove old container
           echo "Stopping $CONTAINER_NAME..."
-          api POST "$DOCKER/containers/$CONTAINER_ID/stop" > /dev/null 2>&1 || true
-          api DELETE "$DOCKER/containers/$CONTAINER_ID" > /dev/null
+          curl -sS -X POST "$PORTAINER_URL/api$DOCKER/containers/$CONTAINER_ID/stop" \
+            -H "X-API-Key: $PORTAINER_API_KEY" > /dev/null 2>&1 || true
+          curl -sS -X DELETE "$PORTAINER_URL/api$DOCKER/containers/$CONTAINER_ID" \
+            -H "X-API-Key: $PORTAINER_API_KEY" > /dev/null
 
           # Recreate with same config but new image
           CREATE_BODY=$(echo "$INSPECT" | jq --arg img "$IMAGE" '{
@@ -208,6 +210,7 @@ jobs:
           rm -f "$TMPBODY"
           echo "Created: $NEW_ID"
 
-          # Start the new container
-          api POST "$DOCKER/containers/$NEW_ID/start" > /dev/null
+          # Start the new container (empty body required for Docker API v1.24+)
+          curl -sS -X POST "$PORTAINER_URL/api$DOCKER/containers/$NEW_ID/start" \
+            -H "X-API-Key: $PORTAINER_API_KEY" > /dev/null
           echo "Container '$CONTAINER_NAME' redeployed successfully"
