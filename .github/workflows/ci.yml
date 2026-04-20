@@ -122,42 +122,47 @@ jobs:
         env:
           PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-          STACK_NAME: lasertools-test
+          STACK_NAME: lasertools_test
         run: |
           set -euo pipefail
 
+          api() {
+            local method=$1 path=$2; shift 2
+            local url="$PORTAINER_URL/api$path"
+            echo ">> $method $url"
+            curl -sS --fail-with-body -X "$method" "$url" \
+              -H "X-API-Key: $PORTAINER_API_KEY" "$@"
+          }
+
           # Find the endpoint ID
-          ENDPOINT_ID=$(curl -sfS "$PORTAINER_URL/api/endpoints" \
-            -H "X-API-Key: $PORTAINER_API_KEY" | jq '.[0].Id')
+          ENDPOINT_ID=$(api GET /endpoints | jq '.[0].Id')
           echo "Endpoint ID: $ENDPOINT_ID"
 
           # Find the test stack by name
-          STACK_JSON=$(curl -sfS "$PORTAINER_URL/api/stacks" \
-            -H "X-API-Key: $PORTAINER_API_KEY" | jq --arg name "$STACK_NAME" '.[] | select(.Name == $name)')
-
-          STACK_ID=$(echo "$STACK_JSON" | jq '.Id')
+          STACK_ID=$(api GET /stacks | jq --arg name "$STACK_NAME" \
+            '[.[] | select(.Name == $name)][0].Id')
           echo "Stack ID: $STACK_ID"
 
           if [ -z "$STACK_ID" ] || [ "$STACK_ID" = "null" ]; then
             echo "::error::Stack '$STACK_NAME' not found in Portainer"
+            echo "Available stacks:"
+            api GET /stacks | jq '.[].Name'
             exit 1
           fi
 
           # Get current stack details (compose file + env vars)
-          STACK_DETAIL=$(curl -sfS "$PORTAINER_URL/api/stacks/$STACK_ID" \
-            -H "X-API-Key: $PORTAINER_API_KEY")
-
+          STACK_DETAIL=$(api GET "/stacks/$STACK_ID")
           STACK_FILE=$(echo "$STACK_DETAIL" | jq -r '.StackFileContent')
           STACK_ENV=$(echo "$STACK_DETAIL" | jq '.Env')
 
           # Redeploy with pullImage to get the new image
-          curl -sfS -X PUT "$PORTAINER_URL/api/stacks/$STACK_ID?endpointId=$ENDPOINT_ID" \
-            -H "X-API-Key: $PORTAINER_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n \
-              --arg file "$STACK_FILE" \
-              --argjson env "$STACK_ENV" \
-              '{stackFileContent: $file, env: $env, prune: false, pullImage: true}')" \
-            -o /dev/null -w "HTTP %{http_code}\n"
+          BODY=$(jq -n \
+            --arg file "$STACK_FILE" \
+            --argjson env "$STACK_ENV" \
+            '{stackFileContent: $file, env: $env, prune: false, pullImage: true}')
+
+          RESPONSE=$(api PUT "/stacks/$STACK_ID?endpointId=$ENDPOINT_ID" \
+            -H "Content-Type: application/json" -d "$BODY")
+          echo "Redeploy response: $(echo "$RESPONSE" | jq -r '.Name // "OK"')"
 
           echo "Test stack '$STACK_NAME' redeployed successfully"
