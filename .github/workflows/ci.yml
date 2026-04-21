@@ -170,5 +170,7 @@ jobs:
           echo "Stack ID: $STACK_ID"
 
           # Git-stack redeploy: Portainer pulls latest compose and recreates services.
-          api PUT "/stacks/$STACK_ID/git/redeploy?endpointId=$EID" > /dev/null
+          api PUT "/stacks/$STACK_ID/git/redeploy?endpointId=$EID" \
+            -H "Content-Type: application/json" \
+            -d '{}' > /dev/null
           echo "Stack '$STACK_NAME' redeploy triggered successfully"
