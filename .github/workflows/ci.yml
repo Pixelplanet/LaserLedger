@@ -212,11 +212,6 @@ jobs:
           rm -f "$TMPBODY"
           echo "Created: $NEW_ID"
 
-          # Explicitly enforce restart policy after recreate as a second safeguard.
-          api POST "$DOCKER/containers/$NEW_ID/update" \
-            -H "Content-Type: application/json" \
-            -d '{"RestartPolicy":{"Name":"always"}}' > /dev/null
-
           # Start the new container (empty body required for Docker API v1.24+)
           if ! curl -sS --http1.1 --fail-with-body -X POST "$PORTAINER_URL/api$DOCKER/containers/$NEW_ID/start" \
             -H "X-API-Key: $PORTAINER_API_KEY" \
