@@ -158,25 +158,6 @@ jobs:
             echo "$response"
           }
 
-          # Call Docker endpoints where body must be empty (start/stop/delete),
-          # while still enforcing HTTP status checks.
-          api_no_body() {
-            local method=$1 path=$2
-            local url="$PORTAINER_URL/api$path"
-            echo ">> $method $url" >&2
-            local response http_code
-            response=$(curl -sS -w "\n%{http_code}" -X "$method" "$url" \
-              -H "X-API-Key: $PORTAINER_API_KEY")
-            http_code=$(echo "$response" | tail -1)
-            response=$(echo "$response" | sed '$d')
-            if [ "$http_code" -ge 400 ]; then
-              echo "::error::HTTP $http_code from $method $url" >&2
-              echo "Response body: $response" >&2
-              return 1
-            fi
-            echo "$response"
-          }
-
           # Find the endpoint ID
           EID=$(api GET /endpoints | jq '.[0].Id')
           echo "Endpoint ID: $EID"
@@ -203,8 +184,10 @@ jobs:
 
           # Stop and remove old container
           echo "Stopping $CONTAINER_NAME..."
-          api_no_body POST "$DOCKER/containers/$CONTAINER_ID/stop" > /dev/null || true
-          api_no_body DELETE "$DOCKER/containers/$CONTAINER_ID" > /dev/null
+          curl -sS --fail-with-body -X POST "$PORTAINER_URL/api$DOCKER/containers/$CONTAINER_ID/stop" \
+            -H "X-API-Key: $PORTAINER_API_KEY" -o /dev/null || true
+          curl -sS --fail-with-body -X DELETE "$PORTAINER_URL/api$DOCKER/containers/$CONTAINER_ID" \
+            -H "X-API-Key: $PORTAINER_API_KEY" -o /dev/null
 
           # Recreate with same config but new image
           CREATE_BODY=$(echo "$INSPECT" | jq --arg img "$IMAGE" '{
@@ -237,7 +220,8 @@ jobs:
             -d '{"RestartPolicy":{"Name":"always"}}' > /dev/null
 
           # Start the new container (empty body required for Docker API v1.24+)
-          if ! api_no_body POST "$DOCKER/containers/$NEW_ID/start" > /dev/null; then
+          if ! curl -sS --fail-with-body -X POST "$PORTAINER_URL/api$DOCKER/containers/$NEW_ID/start" \
+            -H "X-API-Key: $PORTAINER_API_KEY" -o /dev/null; then
             echo "::error::Failed to start '$CONTAINER_NAME', collecting logs" >&2
             api GET "$DOCKER/containers/$NEW_ID/logs?stdout=true&stderr=true&tail=120" || true
             exit 1
