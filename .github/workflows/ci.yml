@@ -131,85 +131,42 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Redeploy lasertools_test stack via Portainer
+      - name: Recreate laserledger-test container via Portainer
         env:
           PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-          STACK_NAME: lasertools_test
+          PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
         run: |
-          set -euo pipefail
+          CONTAINER_NAME="laserledger-test"
           PORTAINER_URL="${PORTAINER_URL%/}"
+          ENDPOINT_ID="$PORTAINER_ENDPOINT_ID"
 
-          api() {
-            local method=$1 path=$2; shift 2
-            local url="$PORTAINER_URL/api$path"
-            echo ">> $method $url" >&2
-            local response http_code
-            response=$(curl -sS -w "\n%{http_code}" -X "$method" "$url" \
-              -H "X-API-Key: $PORTAINER_API_KEY" "$@")
-            http_code=$(echo "$response" | tail -1)
-            response=$(echo "$response" | sed '$d')
-            if [ "$http_code" -ge 400 ]; then
-              echo "::error::HTTP $http_code from $method $url" >&2
-              echo "Response body: $response" >&2
-              return 1
-            fi
-            echo "$response"
-          }
+          echo "Looking up container: ${CONTAINER_NAME}"
 
-          # Find endpoint and stack IDs
-          EID=$(api GET /endpoints | jq '.[0].Id')
-          echo "Endpoint ID: $EID"
+          CONTAINERS=$(curl -sf \
+            -H "X-API-Key: ${PORTAINER_API_KEY}" \
+            "${PORTAINER_URL}/api/endpoints/${ENDPOINT_ID}/docker/containers/json?all=true")
 
-          STACK_ID=$(api GET /stacks | jq -r --arg name "$STACK_NAME" '.[] | select(.Name == $name) | .Id' | head -n 1)
-          if [ -z "$STACK_ID" ] || [ "$STACK_ID" = "null" ]; then
-            echo "::error::Stack '$STACK_NAME' not found"
-            api GET /stacks | jq -r '.[].Name' >&2 || true
+          CONTAINER_ID=$(echo "$CONTAINERS" | jq -r --arg n "/${CONTAINER_NAME}" '.[] | select(.Names | index($n)) | .Id' | head -n1)
+
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "::error::Container '${CONTAINER_NAME}' not found"
             exit 1
           fi
-          echo "Stack ID: $STACK_ID"
 
-          # Preferred path for git-backed stacks.
-          REDEPLOY_URL="$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$EID"
-          REDEPLOY_RAW=$(curl -sS -w "\n%{http_code}" -X PUT "$REDEPLOY_URL" \
-            -H "X-API-Key: $PORTAINER_API_KEY" \
+          echo "Found container ID: ${CONTAINER_ID:0:12}"
+
+          HTTP_CODE=$(curl -s -o /tmp/response.txt -w "%{http_code}" \
+            -X POST \
+            -H "X-API-Key: ${PORTAINER_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d '{}')
-          REDEPLOY_CODE=$(echo "$REDEPLOY_RAW" | tail -1)
-          REDEPLOY_BODY=$(echo "$REDEPLOY_RAW" | sed '$d')
+            -d '{"PullImage": true}' \
+            "${PORTAINER_URL}/api/docker/${ENDPOINT_ID}/containers/${CONTAINER_ID}/recreate")
 
-          if [ "$REDEPLOY_CODE" -lt 400 ]; then
-            echo "Stack '$STACK_NAME' git redeploy triggered successfully"
-            exit 0
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "Successfully recreated ${CONTAINER_NAME} (HTTP ${HTTP_CODE})"
+          else
+            echo "::error::Failed to recreate container (HTTP ${HTTP_CODE})"
+            cat /tmp/response.txt
+            exit 1
           fi
-
-          echo "Git redeploy failed with HTTP $REDEPLOY_CODE" >&2
-          echo "Git redeploy body: $REDEPLOY_BODY" >&2
-
-          # Fallback: update stack from current stack file in Portainer and force image pull.
-          if echo "$REDEPLOY_BODY" | grep -qi "authentication required\|repository not found\|Unable get latest commit id"; then
-            echo "Falling back to stack update using current Portainer stack file..." >&2
-
-            STACK_META=$(api GET "/stacks/$STACK_ID")
-            STACK_ENV=$(echo "$STACK_META" | jq '.Env // []')
-            STACK_FILE_RAW=$(api GET "/stacks/$STACK_ID/file")
-            STACK_FILE=$(echo "$STACK_FILE_RAW" | jq -r '.StackFileContent // .stackFileContent // empty' 2>/dev/null || true)
-            if [ -z "$STACK_FILE" ]; then
-              STACK_FILE="$STACK_FILE_RAW"
-            fi
-
-            BODY=$(jq -n \
-              --arg file "$STACK_FILE" \
-              --argjson env "$STACK_ENV" \
-              '{stackFileContent: $file, env: $env, prune: false, pullImage: true}')
-
-            api PUT "/stacks/$STACK_ID?endpointId=$EID" \
-              -H "Content-Type: application/json" \
-              -d "$BODY" > /dev/null
-
-            echo "Stack '$STACK_NAME' redeployed via stack update fallback"
-            exit 0
-          fi
-
-          echo "::error::Stack redeploy failed and no fallback condition matched" >&2
-          exit 1
