@@ -72,6 +72,34 @@ function Nav() {
   );
 }
 
+function AppFooter() {
+  useEffect(() => {
+    const h = window.location.hostname;
+    const base = h.indexOf('test.') > -1 ? 'https://test.lasertools.org' : 'https://lasertools.org';
+    const ltBack = document.getElementById('lt-back') as HTMLAnchorElement | null;
+    if (ltBack) ltBack.href = base;
+    const s = document.createElement('script');
+    s.src = base + '/api/widget.js';
+    document.body.appendChild(s);
+    return () => { s.remove(); };
+  }, []);
+
+  return (
+    <footer className="app-footer">
+      <div id="donation-tracker" data-variant="compact"></div>
+      <div className="footer-links">
+        <a id="lt-back" href="https://lasertools.org" className="footer-link">← Back to LaserTools</a>
+        <span className="footer-sep">·</span>
+        &copy; 2026 Thomas Winnerl
+        <span className="footer-sep">·</span>
+        <a href="https://github.com/Pixelplanet/LaserLedger" target="_blank" rel="noopener noreferrer" className="footer-link">GitHub</a>
+        <span className="footer-sep">·</span>
+        <Link to="/privacy" className="footer-link">Privacy Policy</Link>
+      </div>
+    </footer>
+  );
+}
+
 export default function App() {
   const refresh = useAuthStore((s) => s.refresh);
   useEffect(() => {
@@ -107,9 +135,7 @@ export default function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
-      <footer className="app-shell" style={{ marginTop: '3rem', padding: '1rem 0', borderTop: '1px solid var(--border)', fontSize: '0.85rem', color: 'var(--muted)' }}>
-        <Link to="/privacy">Privacy</Link> · <a href="https://github.com/" target="_blank" rel="noreferrer">Source</a>
-      </footer>
+      <AppFooter />
     </div>
   );
 }
