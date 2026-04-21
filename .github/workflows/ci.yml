@@ -131,12 +131,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Redeploy laserledger-test via Portainer
+      - name: Redeploy lasertools_test stack via Portainer
         env:
           PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-          IMAGE: pixelplanet/laserledger:latest
-          CONTAINER_NAME: laserledger-test
+          STACK_NAME: lasertools_test
         run: |
           set -euo pipefail
           PORTAINER_URL="${PORTAINER_URL%/}"
@@ -158,91 +157,18 @@ jobs:
             echo "$response"
           }
 
-          # Find the endpoint ID
+          # Find endpoint and stack IDs
           EID=$(api GET /endpoints | jq '.[0].Id')
           echo "Endpoint ID: $EID"
-          DOCKER="/endpoints/$EID/docker"
 
-          # Pull the latest image
-          echo "Pulling $IMAGE..."
-          api POST "$DOCKER/images/create?fromImage=${IMAGE%%:*}&tag=${IMAGE##*:}" \
-            > /dev/null
-
-          # Find the running container by name
-          CONTAINER_ID=$(api GET "$DOCKER/containers/json?all=true" \
-            | jq -r --arg name "/$CONTAINER_NAME" \
-              '.[] | select(.Names[] == $name) | .Id')
-
-          if [ -z "$CONTAINER_ID" ]; then
-            echo "::error::Container '$CONTAINER_NAME' not found"
+          STACK_ID=$(api GET /stacks | jq -r --arg name "$STACK_NAME" '.[] | select(.Name == $name) | .Id' | head -n 1)
+          if [ -z "$STACK_ID" ] || [ "$STACK_ID" = "null" ]; then
+            echo "::error::Stack '$STACK_NAME' not found"
+            api GET /stacks | jq -r '.[].Name' >&2 || true
             exit 1
           fi
-          echo "Container: $CONTAINER_ID"
+          echo "Stack ID: $STACK_ID"
 
-          # Get current container config for recreation
-          INSPECT=$(api GET "$DOCKER/containers/$CONTAINER_ID/json")
-
-          # Stop and remove old container
-          echo "Stopping $CONTAINER_NAME..."
-          curl -sS --http1.1 --fail-with-body -X POST "$PORTAINER_URL/api$DOCKER/containers/$CONTAINER_ID/stop" \
-            -H "X-API-Key: $PORTAINER_API_KEY" \
-            -H "Content-Length: 0" \
-            -o /dev/null || true
-          curl -sS --fail-with-body -X DELETE "$PORTAINER_URL/api$DOCKER/containers/$CONTAINER_ID" \
-            -H "X-API-Key: $PORTAINER_API_KEY" -o /dev/null
-
-          # Recreate with a minimal, stable payload.
-          # Full inspect payloads can include runtime-only networking fields that break start.
-          CREATE_BODY=$(echo "$INSPECT" | jq --arg img "$IMAGE" '{
-            Image: $img,
-            Env: (.Config.Env // []),
-            ExposedPorts: (.Config.ExposedPorts // {}),
-            Labels: (.Config.Labels // {}),
-            HostConfig: {
-              Binds: (.HostConfig.Binds // []),
-              PortBindings: (.HostConfig.PortBindings // {}),
-              RestartPolicy: {Name: "always"}
-            }
-          }')
-          TMPBODY=$(mktemp)
-          echo "$CREATE_BODY" > "$TMPBODY"
-
-          NEW_ID=$(api POST "$DOCKER/containers/create?name=$CONTAINER_NAME" \
-            -H "Content-Type: application/json" -d @"$TMPBODY" | jq -r '.Id')
-          rm -f "$TMPBODY"
-          echo "Created: $NEW_ID"
-
-          # Start the new container (empty body required for Docker API v1.24+)
-          if ! curl -sS --http1.1 --fail-with-body -X POST "$PORTAINER_URL/api$DOCKER/containers/$NEW_ID/start" \
-            -H "X-API-Key: $PORTAINER_API_KEY" \
-            -H "Content-Length: 0"; then
-            echo "::error::Failed to start '$CONTAINER_NAME', collecting logs" >&2
-            api GET "$DOCKER/containers/$NEW_ID/logs?stdout=true&stderr=true&tail=120" || true
-            exit 1
-          fi
-
-          # Verify container is running and restart policy is always (with short retries).
-          IS_RUNNING="false"
-          RESTART_NAME=""
-          for i in 1 2 3 4 5; do
-            NEW_INSPECT=$(api GET "$DOCKER/containers/$NEW_ID/json")
-            IS_RUNNING=$(echo "$NEW_INSPECT" | jq -r '.State.Running')
-            RESTART_NAME=$(echo "$NEW_INSPECT" | jq -r '.HostConfig.RestartPolicy.Name // ""')
-            [ "$IS_RUNNING" = "true" ] && break
-            sleep 2
-          done
-
-          if [ "$IS_RUNNING" != "true" ]; then
-            echo "::error::Container '$CONTAINER_NAME' is not running after redeploy" >&2
-            echo "State: $(echo "$NEW_INSPECT" | jq -c '.State')" >&2
-            api GET "$DOCKER/containers/$NEW_ID/logs?stdout=true&stderr=true&tail=200" || true
-            exit 1
-          fi
-
-          if [ "$RESTART_NAME" != "always" ]; then
-            echo "::error::Container '$CONTAINER_NAME' restart policy is '$RESTART_NAME' (expected 'always')" >&2
-            exit 1
-          fi
-
-          echo "Container state: running=$IS_RUNNING restart=$RESTART_NAME"
-          echo "Container '$CONTAINER_NAME' redeployed successfully"
+          # Git-stack redeploy: Portainer pulls latest compose and recreates services.
+          api POST "/stacks/$STACK_ID/git/redeploy?endpointId=$EID" > /dev/null
+          echo "Stack '$STACK_NAME' redeploy triggered successfully"
