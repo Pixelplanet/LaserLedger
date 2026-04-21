@@ -169,8 +169,47 @@ jobs:
           fi
           echo "Stack ID: $STACK_ID"
 
-          # Git-stack redeploy: Portainer pulls latest compose and recreates services.
-          api PUT "/stacks/$STACK_ID/git/redeploy?endpointId=$EID" \
+          # Preferred path for git-backed stacks.
+          REDEPLOY_URL="$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$EID"
+          REDEPLOY_RAW=$(curl -sS -w "\n%{http_code}" -X PUT "$REDEPLOY_URL" \
+            -H "X-API-Key: $PORTAINER_API_KEY" \
             -H "Content-Type: application/json" \
-            -d '{}' > /dev/null
-          echo "Stack '$STACK_NAME' redeploy triggered successfully"
+            -d '{}')
+          REDEPLOY_CODE=$(echo "$REDEPLOY_RAW" | tail -1)
+          REDEPLOY_BODY=$(echo "$REDEPLOY_RAW" | sed '$d')
+
+          if [ "$REDEPLOY_CODE" -lt 400 ]; then
+            echo "Stack '$STACK_NAME' git redeploy triggered successfully"
+            exit 0
+          fi
+
+          echo "Git redeploy failed with HTTP $REDEPLOY_CODE" >&2
+          echo "Git redeploy body: $REDEPLOY_BODY" >&2
+
+          # Fallback: update stack from current stack file in Portainer and force image pull.
+          if echo "$REDEPLOY_BODY" | grep -qi "authentication required\|repository not found\|Unable get latest commit id"; then
+            echo "Falling back to stack update using current Portainer stack file..." >&2
+
+            STACK_META=$(api GET "/stacks/$STACK_ID")
+            STACK_ENV=$(echo "$STACK_META" | jq '.Env // []')
+            STACK_FILE_RAW=$(api GET "/stacks/$STACK_ID/file")
+            STACK_FILE=$(echo "$STACK_FILE_RAW" | jq -r '.StackFileContent // .stackFileContent // empty' 2>/dev/null || true)
+            if [ -z "$STACK_FILE" ]; then
+              STACK_FILE="$STACK_FILE_RAW"
+            fi
+
+            BODY=$(jq -n \
+              --arg file "$STACK_FILE" \
+              --argjson env "$STACK_ENV" \
+              '{stackFileContent: $file, env: $env, prune: false, pullImage: true}')
+
+            api PUT "/stacks/$STACK_ID?endpointId=$EID" \
+              -H "Content-Type: application/json" \
+              -d "$BODY" > /dev/null
+
+            echo "Stack '$STACK_NAME' redeployed via stack update fallback"
+            exit 0
+          fi
+
+          echo "::error::Stack redeploy failed and no fallback condition matched" >&2
+          exit 1
