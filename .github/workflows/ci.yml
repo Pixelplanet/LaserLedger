@@ -158,6 +158,25 @@ jobs:
             echo "$response"
           }
 
+          # Call Docker endpoints where body must be empty (start/stop/delete),
+          # while still enforcing HTTP status checks.
+          api_no_body() {
+            local method=$1 path=$2
+            local url="$PORTAINER_URL/api$path"
+            echo ">> $method $url" >&2
+            local response http_code
+            response=$(curl -sS -w "\n%{http_code}" -X "$method" "$url" \
+              -H "X-API-Key: $PORTAINER_API_KEY")
+            http_code=$(echo "$response" | tail -1)
+            response=$(echo "$response" | sed '$d')
+            if [ "$http_code" -ge 400 ]; then
+              echo "::error::HTTP $http_code from $method $url" >&2
+              echo "Response body: $response" >&2
+              return 1
+            fi
+            echo "$response"
+          }
+
           # Find the endpoint ID
           EID=$(api GET /endpoints | jq '.[0].Id')
           echo "Endpoint ID: $EID"
@@ -184,10 +203,8 @@ jobs:
 
           # Stop and remove old container
           echo "Stopping $CONTAINER_NAME..."
-          curl -sS -X POST "$PORTAINER_URL/api$DOCKER/containers/$CONTAINER_ID/stop" \
-            -H "X-API-Key: $PORTAINER_API_KEY" > /dev/null 2>&1 || true
-          curl -sS -X DELETE "$PORTAINER_URL/api$DOCKER/containers/$CONTAINER_ID" \
-            -H "X-API-Key: $PORTAINER_API_KEY" > /dev/null
+          api_no_body POST "$DOCKER/containers/$CONTAINER_ID/stop" > /dev/null || true
+          api_no_body DELETE "$DOCKER/containers/$CONTAINER_ID" > /dev/null
 
           # Recreate with same config but new image
           CREATE_BODY=$(echo "$INSPECT" | jq --arg img "$IMAGE" '{
@@ -210,7 +227,30 @@ jobs:
           rm -f "$TMPBODY"
           echo "Created: $NEW_ID"
 
+          # Explicitly enforce restart policy after recreate.
+          # Docker can reset this when recreating from inspect-derived config.
+          api POST "$DOCKER/containers/$NEW_ID/update" \
+            -H "Content-Type: application/json" \
+            -d '{"RestartPolicy":{"Name":"always"}}' > /dev/null
+
           # Start the new container (empty body required for Docker API v1.24+)
-          curl -sS -X POST "$PORTAINER_URL/api$DOCKER/containers/$NEW_ID/start" \
-            -H "X-API-Key: $PORTAINER_API_KEY" > /dev/null
+          api_no_body POST "$DOCKER/containers/$NEW_ID/start" > /dev/null
+
+          # Verify container is running and restart policy is always.
+          NEW_INSPECT=$(api GET "$DOCKER/containers/$NEW_ID/json")
+          IS_RUNNING=$(echo "$NEW_INSPECT" | jq -r '.State.Running')
+          RESTART_NAME=$(echo "$NEW_INSPECT" | jq -r '.HostConfig.RestartPolicy.Name // ""')
+
+          if [ "$IS_RUNNING" != "true" ]; then
+            echo "::error::Container '$CONTAINER_NAME' is not running after redeploy" >&2
+            echo "State: $(echo "$NEW_INSPECT" | jq -c '.State')" >&2
+            exit 1
+          fi
+
+          if [ "$RESTART_NAME" != "always" ]; then
+            echo "::error::Container '$CONTAINER_NAME' restart policy is '$RESTART_NAME' (expected 'always')" >&2
+            exit 1
+          fi
+
+          echo "Container state: running=$IS_RUNNING restart=$RESTART_NAME"
           echo "Container '$CONTAINER_NAME' redeployed successfully"
