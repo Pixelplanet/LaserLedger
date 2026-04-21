@@ -184,8 +184,10 @@ jobs:
 
           # Stop and remove old container
           echo "Stopping $CONTAINER_NAME..."
-          curl -sS --fail-with-body -X POST "$PORTAINER_URL/api$DOCKER/containers/$CONTAINER_ID/stop" \
-            -H "X-API-Key: $PORTAINER_API_KEY" -o /dev/null || true
+          curl -sS --http1.1 --fail-with-body -X POST "$PORTAINER_URL/api$DOCKER/containers/$CONTAINER_ID/stop" \
+            -H "X-API-Key: $PORTAINER_API_KEY" \
+            -H "Content-Length: 0" \
+            -o /dev/null || true
           curl -sS --fail-with-body -X DELETE "$PORTAINER_URL/api$DOCKER/containers/$CONTAINER_ID" \
             -H "X-API-Key: $PORTAINER_API_KEY" -o /dev/null
 
@@ -216,8 +218,9 @@ jobs:
             -d '{"RestartPolicy":{"Name":"always"}}' > /dev/null
 
           # Start the new container (empty body required for Docker API v1.24+)
-          if ! curl -sS --fail-with-body -X POST "$PORTAINER_URL/api$DOCKER/containers/$NEW_ID/start" \
-            -H "X-API-Key: $PORTAINER_API_KEY"; then
+          if ! curl -sS --http1.1 --fail-with-body -X POST "$PORTAINER_URL/api$DOCKER/containers/$NEW_ID/start" \
+            -H "X-API-Key: $PORTAINER_API_KEY" \
+            -H "Content-Length: 0"; then
             echo "::error::Failed to start '$CONTAINER_NAME', collecting logs" >&2
             api GET "$DOCKER/containers/$NEW_ID/logs?stdout=true&stderr=true&tail=120" || true
             exit 1
