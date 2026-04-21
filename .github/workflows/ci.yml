@@ -189,22 +189,23 @@ jobs:
           curl -sS --fail-with-body -X DELETE "$PORTAINER_URL/api$DOCKER/containers/$CONTAINER_ID" \
             -H "X-API-Key: $PORTAINER_API_KEY" -o /dev/null
 
-          # Recreate with same config but new image
+          # Recreate with a minimal, stable payload.
+          # Full inspect payloads can include runtime-only networking fields that break start.
           CREATE_BODY=$(echo "$INSPECT" | jq --arg img "$IMAGE" '{
             Image: $img,
-            Env: .Config.Env,
-            ExposedPorts: .Config.ExposedPorts,
-            Labels: .Config.Labels,
-            Volumes: .Config.Volumes,
-            HostConfig: (
-              .HostConfig
-              | .RestartPolicy = {Name: "always"}
-              | .AutoRemove = false
-            ),
-            NetworkingConfig: {
-              EndpointsConfig: .NetworkSettings.Networks
-            },
-            Healthcheck: .Config.Healthcheck
+            Env: (.Config.Env // []),
+            Cmd: (.Config.Cmd // null),
+            Entrypoint: (.Config.Entrypoint // null),
+            WorkingDir: (.Config.WorkingDir // ""),
+            User: (.Config.User // ""),
+            ExposedPorts: (.Config.ExposedPorts // {}),
+            Labels: (.Config.Labels // {}),
+            HostConfig: {
+              Binds: (.HostConfig.Binds // []),
+              PortBindings: (.HostConfig.PortBindings // {}),
+              NetworkMode: (.HostConfig.NetworkMode // "bridge"),
+              RestartPolicy: {Name: "always"}
+            }
           }')
           TMPBODY=$(mktemp)
           echo "$CREATE_BODY" > "$TMPBODY"
