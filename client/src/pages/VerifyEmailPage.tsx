@@ -35,7 +35,7 @@ export default function VerifyEmailPage() {
           Email verified. <Link to="/login">Sign in →</Link>
         </p>
       )}
-      {status === 'error' && <p style={{ color: '#f87171' }}>{error}</p>}
+      {status === 'error' && <p className="text-error">{error}</p>}
     </PageBlock>
   );
 }

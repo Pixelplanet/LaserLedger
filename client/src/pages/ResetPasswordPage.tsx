@@ -28,20 +28,20 @@ export default function ResetPasswordPage() {
           Password updated. <Link to="/login">Sign in →</Link>
         </p>
       ) : (
-        <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, maxWidth: 360 }}>
+        <form onSubmit={onSubmit} className="form" style={{ maxWidth: 360 }}>
           <input
+            className="input"
             type="password"
             required
             minLength={8}
             placeholder="New password (8+ chars)"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={{ padding: 10, borderRadius: 8, border: '1px solid #2a2a4a', background: '#0d0d1a', color: '#e2e8f0' }}
           />
-          <button type="submit" style={{ padding: '10px 16px', background: '#a855f7', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+          <button type="submit" className="btn primary">
             Update password
           </button>
-          {error && <p style={{ color: '#f87171' }}>{error}</p>}
+          {error && <p className="err">{error}</p>}
         </form>
       )}
     </PageBlock>
