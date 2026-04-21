@@ -213,7 +213,11 @@ jobs:
             ExposedPorts: .Config.ExposedPorts,
             Labels: .Config.Labels,
             Volumes: .Config.Volumes,
-            HostConfig: .HostConfig,
+            HostConfig: (
+              .HostConfig
+              | .RestartPolicy = {Name: "always"}
+              | .AutoRemove = false
+            ),
             NetworkingConfig: {
               EndpointsConfig: .NetworkSettings.Networks
             },
@@ -227,23 +231,33 @@ jobs:
           rm -f "$TMPBODY"
           echo "Created: $NEW_ID"
 
-          # Explicitly enforce restart policy after recreate.
-          # Docker can reset this when recreating from inspect-derived config.
+          # Explicitly enforce restart policy after recreate as a second safeguard.
           api POST "$DOCKER/containers/$NEW_ID/update" \
             -H "Content-Type: application/json" \
             -d '{"RestartPolicy":{"Name":"always"}}' > /dev/null
 
           # Start the new container (empty body required for Docker API v1.24+)
-          api_no_body POST "$DOCKER/containers/$NEW_ID/start" > /dev/null
+          if ! api_no_body POST "$DOCKER/containers/$NEW_ID/start" > /dev/null; then
+            echo "::error::Failed to start '$CONTAINER_NAME', collecting logs" >&2
+            api GET "$DOCKER/containers/$NEW_ID/logs?stdout=true&stderr=true&tail=120" || true
+            exit 1
+          fi
 
-          # Verify container is running and restart policy is always.
-          NEW_INSPECT=$(api GET "$DOCKER/containers/$NEW_ID/json")
-          IS_RUNNING=$(echo "$NEW_INSPECT" | jq -r '.State.Running')
-          RESTART_NAME=$(echo "$NEW_INSPECT" | jq -r '.HostConfig.RestartPolicy.Name // ""')
+          # Verify container is running and restart policy is always (with short retries).
+          IS_RUNNING="false"
+          RESTART_NAME=""
+          for i in 1 2 3 4 5; do
+            NEW_INSPECT=$(api GET "$DOCKER/containers/$NEW_ID/json")
+            IS_RUNNING=$(echo "$NEW_INSPECT" | jq -r '.State.Running')
+            RESTART_NAME=$(echo "$NEW_INSPECT" | jq -r '.HostConfig.RestartPolicy.Name // ""')
+            [ "$IS_RUNNING" = "true" ] && break
+            sleep 2
+          done
 
           if [ "$IS_RUNNING" != "true" ]; then
             echo "::error::Container '$CONTAINER_NAME' is not running after redeploy" >&2
             echo "State: $(echo "$NEW_INSPECT" | jq -c '.State')" >&2
+            api GET "$DOCKER/containers/$NEW_ID/logs?stdout=true&stderr=true&tail=200" || true
             exit 1
           fi
 
