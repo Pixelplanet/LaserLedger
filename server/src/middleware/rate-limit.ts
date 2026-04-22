@@ -1,9 +1,9 @@
 import rateLimit from 'express-rate-limit';
 import type { Request } from 'express';
-import { env } from '../config.js';
+import { isTest } from '../config.js';
 
 const userKey = (req: Request) => req.user?.id ?? req.ip ?? 'anon';
-const skip = () => env.NODE_ENV === 'test';
+const skip = isTest;
 
 /** 10 setting submissions per hour per user. */
 export const submissionLimiter = rateLimit({

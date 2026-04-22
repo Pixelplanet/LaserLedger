@@ -1,8 +1,8 @@
 import knex, { type Knex } from 'knex';
 import config from './knexfile.js';
 
-const env = process.env.NODE_ENV || 'development';
-const cfg = config[env] ?? config.development!;
+const profile = process.env.DB_PROFILE || (process.env.APP_ENV === 'automated-test' ? 'test' : 'production');
+const cfg = config[profile] ?? config.production!;
 
 export const db: Knex = knex(cfg);
 

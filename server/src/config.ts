@@ -43,5 +43,5 @@ export const env = {
   MAX_UPLOAD_SIZE: num('MAX_UPLOAD_SIZE', 5 * 1024 * 1024),
 };
 
-export const isProd = (): boolean => env.NODE_ENV === 'production';
-export const isTest = (): boolean => env.NODE_ENV === 'test';
+export const isTest = (): boolean => env.APP_ENV === 'automated-test';
+export const isProd = (): boolean => env.APP_ENV !== 'local' && !isTest();

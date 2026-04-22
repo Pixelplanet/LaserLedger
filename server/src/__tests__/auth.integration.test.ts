@@ -98,11 +98,11 @@ describe('auth flow (integration)', () => {
     expect(cookies.some((c) => c.startsWith('ll_session='))).toBe(true);
   });
 
-  it('returns 503 for password reset when SMTP is not configured in production', async () => {
-    const originalNodeEnv = env.NODE_ENV;
+  it('returns 503 for password reset when SMTP is not configured in production-like runtime', async () => {
+    const originalAppEnv = env.APP_ENV;
     const originalSmtpHost = env.SMTP_HOST;
 
-    env.NODE_ENV = 'production';
+    env.APP_ENV = 'prod';
     env.SMTP_HOST = '';
 
     try {
@@ -121,7 +121,7 @@ describe('auth flow (integration)', () => {
       expect(existing.body.error?.code).toBe('email_unavailable');
       expect(unknown.body.error?.code).toBe('email_unavailable');
     } finally {
-      env.NODE_ENV = originalNodeEnv;
+      env.APP_ENV = originalAppEnv;
       env.SMTP_HOST = originalSmtpHost;
     }
   });

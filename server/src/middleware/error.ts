@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { AppError } from '../utils/errors.js';
 import { ZodError } from 'zod';
+import { isProd, isTest } from '../config.js';
 
 export function notFoundHandler(req: Request, res: Response): void {
   res.status(404).json({ error: { code: 'not_found', message: `Not found: ${req.path}` } });
@@ -25,11 +26,10 @@ export function errorHandler(
     });
     return;
   }
-  if (process.env.NODE_ENV !== 'test') {
+  if (!isTest()) {
     // eslint-disable-next-line no-console
     console.error('[error]', req.method, req.path, err);
   }
-  const message =
-    process.env.NODE_ENV === 'production' ? 'Internal server error' : (err as Error)?.message ?? 'Unknown error';
+  const message = isProd() ? 'Internal server error' : (err as Error)?.message ?? 'Unknown error';
   res.status(500).json({ error: { code: 'internal', message } });
 }

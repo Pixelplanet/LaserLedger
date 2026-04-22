@@ -1,5 +1,6 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import { env } from '../config.js';
+import { isTest } from '../config.js';
 
 let cachedTransporter: Transporter | null = null;
 
@@ -38,7 +39,7 @@ export async function sendEmail(msg: EmailMessage): Promise<void> {
   const transporter = getTransporter();
   if (!transporter) {
     // Dev/test mode: console-only logging
-    if (process.env.NODE_ENV !== 'test') {
+    if (!isTest()) {
       // eslint-disable-next-line no-console
       console.info(`[email:stub] To: ${msg.to} | Subject: ${msg.subject}\n${msg.text}`);
     }

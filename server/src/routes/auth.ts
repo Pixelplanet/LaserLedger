@@ -20,7 +20,7 @@ import {
   welcomeMessage,
   isEmailTransportConfigured,
 } from '../services/email.js';
-import { env } from '../config.js';
+import { env, isProd, isTest } from '../config.js';
 import { AppError, badRequest, conflict, notFound, unauthorized } from '../utils/errors.js';
 import rateLimit from 'express-rate-limit';
 import { OAuth2Client } from 'google-auth-library';
@@ -33,14 +33,14 @@ const loginLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => env.NODE_ENV === 'test',
+  skip: isTest,
 });
 
 const registerLimiter = rateLimit({
   windowMs: 60_000,
   max: 10,
   standardHeaders: true,
-  skip: () => env.NODE_ENV === 'test',
+  skip: isTest,
 });
 
 function publicUser(u: User) {
@@ -235,7 +235,7 @@ router.post('/resend-verification', requireAuthAny, async (req, res, next) => {
 // ─── Request password reset ────────────────────────────────────────────────
 router.post('/request-reset', validate(PasswordResetRequestInput), async (req, res, next) => {
   try {
-    if (env.NODE_ENV === 'production' && !isEmailTransportConfigured()) {
+    if (isProd() && !isEmailTransportConfigured()) {
       throw new AppError(503, 'email_unavailable', 'Password reset email is currently unavailable');
     }
     const { email } = req.body as { email: string };

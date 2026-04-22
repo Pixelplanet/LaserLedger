@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { env } from '../config.js';
+import { env, isProd } from '../config.js';
 
 export interface JwtPayload {
   sub: string; // user id
@@ -37,7 +37,7 @@ export function cookieOptions() {
   return {
     httpOnly: true,
     sameSite: 'lax' as const,
-    secure: env.NODE_ENV === 'production',
+    secure: isProd(),
     path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000,
   };

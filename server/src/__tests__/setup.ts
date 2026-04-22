@@ -3,7 +3,8 @@ import { db } from '../db/index.js';
 
 // Each test file gets a fresh in-memory SQLite database with full schema + seeds.
 beforeAll(async () => {
-  process.env.NODE_ENV = 'test';
+  process.env.APP_ENV = 'automated-test';
+  process.env.DB_PROFILE = 'test';
   await db.migrate.latest();
   await db.seed.run();
 });

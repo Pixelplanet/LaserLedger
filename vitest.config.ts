@@ -7,6 +7,8 @@ export default defineConfig({
     environment: 'node',
     env: {
       NODE_ENV: 'test',
+      APP_ENV: 'automated-test',
+      DB_PROFILE: 'test',
       JWT_SECRET: 'test-secret-do-not-use-in-prod-aaaaaaaaaaaaaaaaaaaa',
       APP_BASE_URL: 'http://localhost:5173',
       UPLOAD_DIR: './test-uploads',
