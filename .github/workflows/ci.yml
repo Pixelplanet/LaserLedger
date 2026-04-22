@@ -142,11 +142,23 @@ jobs:
           PORTAINER_URL="${PORTAINER_URL%/}"
           ENDPOINT_ID="$PORTAINER_ENDPOINT_ID"
 
-          echo "Looking up container: ${CONTAINER_NAME}"
+          echo "Looking up containers"
 
           CONTAINERS=$(curl -sf \
             -H "X-API-Key: ${PORTAINER_API_KEY}" \
             "${PORTAINER_URL}/api/endpoints/${ENDPOINT_ID}/docker/containers/json?all=true")
+
+          # Remove any stale <name>-old container left by a previously failed recreate.
+          # Portainer renames the live container to <name>-old before swapping; if that
+          # run aborted, the -old name is still claimed and the next recreate fails.
+          OLD_ID=$(echo "$CONTAINERS" | jq -r --arg n "/${CONTAINER_NAME}-old" '.[] | select(.Names | index($n)) | .Id' | head -n1)
+          if [ -n "$OLD_ID" ]; then
+            echo "Removing stale ${CONTAINER_NAME}-old (${OLD_ID:0:12})"
+            curl -sf -X DELETE \
+              -H "X-API-Key: ${PORTAINER_API_KEY}" \
+              "${PORTAINER_URL}/api/endpoints/${ENDPOINT_ID}/docker/containers/${OLD_ID}?force=true" \
+              && echo "Removed." || echo "::warning::Could not remove stale -old container; recreate may still fail."
+          fi
 
           CONTAINER_ID=$(echo "$CONTAINERS" | jq -r --arg n "/${CONTAINER_NAME}" '.[] | select(.Names | index($n)) | .Id' | head -n1)
 
