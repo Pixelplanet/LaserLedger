@@ -14,13 +14,15 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
   res.setHeader('X-Request-Id', reqId);
 
   res.on('finish', () => {
+    const path = req.originalUrl.split('?')[0];
+    if (path === '/health') return;
     const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
     const entry = {
       ts: new Date().toISOString(),
       level: res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info',
       req_id: reqId,
       method: req.method,
-      path: req.originalUrl.split('?')[0],
+      path,
       status: res.statusCode,
       duration_ms: Math.round(durationMs * 100) / 100,
       ip: (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ?? req.ip ?? null,

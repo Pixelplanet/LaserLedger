@@ -25,6 +25,7 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      APP_ENV: ${APP_ENV:-prod}
       PORT: 3000
       APP_BASE_URL: ${APP_BASE_URL}
       JWT_SECRET: ${JWT_SECRET}

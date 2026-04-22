@@ -18,9 +18,10 @@ import {
   emailVerificationMessage,
   passwordResetMessage,
   welcomeMessage,
+  isEmailTransportConfigured,
 } from '../services/email.js';
 import { env } from '../config.js';
-import { badRequest, conflict, notFound, unauthorized } from '../utils/errors.js';
+import { AppError, badRequest, conflict, notFound, unauthorized } from '../utils/errors.js';
 import rateLimit from 'express-rate-limit';
 import { OAuth2Client } from 'google-auth-library';
 import type { User } from '@shared/types.js';
@@ -234,6 +235,9 @@ router.post('/resend-verification', requireAuthAny, async (req, res, next) => {
 // ─── Request password reset ────────────────────────────────────────────────
 router.post('/request-reset', validate(PasswordResetRequestInput), async (req, res, next) => {
   try {
+    if (env.NODE_ENV === 'production' && !isEmailTransportConfigured()) {
+      throw new AppError(503, 'email_unavailable', 'Password reset email is currently unavailable');
+    }
     const { email } = req.body as { email: string };
     const user = await db<User>('users').where({ email }).first();
     // Always return 204 to avoid leaking whether email exists

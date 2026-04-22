@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
+import { env } from '../config.js';
 
 const app = createApp();
 
@@ -95,5 +96,33 @@ describe('auth flow (integration)', () => {
     expect(me.headers['set-cookie']).toBeTruthy();
     const cookies = me.headers['set-cookie'] as string[];
     expect(cookies.some((c) => c.startsWith('ll_session='))).toBe(true);
+  });
+
+  it('returns 503 for password reset when SMTP is not configured in production', async () => {
+    const originalNodeEnv = env.NODE_ENV;
+    const originalSmtpHost = env.SMTP_HOST;
+
+    env.NODE_ENV = 'production';
+    env.SMTP_HOST = '';
+
+    try {
+      const existing = await request(app)
+        .post('/api/auth/request-reset')
+        .set('Origin', 'http://localhost:5173')
+        .send({ email: 'alice@example.com' });
+
+      const unknown = await request(app)
+        .post('/api/auth/request-reset')
+        .set('Origin', 'http://localhost:5173')
+        .send({ email: 'unknown@example.com' });
+
+      expect(existing.status).toBe(503);
+      expect(unknown.status).toBe(503);
+      expect(existing.body.error?.code).toBe('email_unavailable');
+      expect(unknown.body.error?.code).toBe('email_unavailable');
+    } finally {
+      env.NODE_ENV = originalNodeEnv;
+      env.SMTP_HOST = originalSmtpHost;
+    }
   });
 });

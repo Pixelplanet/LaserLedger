@@ -11,6 +11,7 @@ function str(name: string, def = ''): string {
 
 export const env = {
   NODE_ENV: str('NODE_ENV', 'development'),
+  APP_ENV: str('APP_ENV', 'local'),
   PORT: num('PORT', 3000),
   APP_BASE_URL: str('APP_BASE_URL', 'http://localhost:3000'),
 

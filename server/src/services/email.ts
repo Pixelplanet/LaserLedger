@@ -3,9 +3,21 @@ import { env } from '../config.js';
 
 let cachedTransporter: Transporter | null = null;
 
+export function isEmailTransportConfigured(): boolean {
+  return Boolean(env.SMTP_HOST);
+}
+
+export function emailTransportStatus(): { configured: boolean; host: string | null; port: number | null } {
+  return {
+    configured: isEmailTransportConfigured(),
+    host: env.SMTP_HOST || null,
+    port: env.SMTP_HOST ? env.SMTP_PORT : null,
+  };
+}
+
 function getTransporter(): Transporter | null {
   if (cachedTransporter) return cachedTransporter;
-  if (!env.SMTP_HOST) return null;
+  if (!isEmailTransportConfigured()) return null;
   cachedTransporter = nodemailer.createTransport({
     host: env.SMTP_HOST,
     port: env.SMTP_PORT,
