@@ -87,7 +87,7 @@ export default function SubmitPage() {
 
   const create = useMutation({
     mutationFn: (body: Record<string, unknown>) => api<CreateResp>('/settings', { method: 'POST', body }),
-    onSuccess: (res) => nav(`/settings/${res.uuid}`),
+    onSuccess: (res) => nav(`/settings/${res.uuid}/edit`),
     onError: (e) => setErr(e instanceof ApiError ? e.message : 'Submission failed'),
   });
 
@@ -241,7 +241,7 @@ export default function SubmitPage() {
           <Button type="submit" variant="primary" size="sm" disabled={create.isPending}>
             {create.isPending ? 'Submitting…' : 'Submit for review'}
           </Button>
-          <span className="hint">Your submission enters the moderation queue. You can edit and add images while it's pending.</span>
+          <span className="hint">Your submission enters the moderation queue. After submit, you land on the edit screen so you can add images right away.</span>
         </div>
       </form>
     </PageBlock>

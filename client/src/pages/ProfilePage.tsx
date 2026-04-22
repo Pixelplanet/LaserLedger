@@ -39,6 +39,8 @@ export default function ProfilePage() {
       {isOwn && (
         <div className="toolbar">
           <Link to="/submit" className="btn primary sm">New submission</Link>
+          <Link to="/account" className="btn sm">Profile settings</Link>
+          {me?.role === 'admin' && <Link to="/admin" className="btn sm">Admin dashboard</Link>}
           <Link to="/forgot-password" className="btn sm">Change password</Link>
         </div>
       )}

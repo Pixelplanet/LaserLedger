@@ -18,6 +18,7 @@ export interface ParsedXcsLayer {
 
 export interface ParsedXcs {
   ext_id: string | null;
+  ext_name: string | null;
   light_source: string | null;
   xtool_material_id: number | null;
   layers: ParsedXcsLayer[];
@@ -47,6 +48,7 @@ export function parseXcs(input: string | Buffer): ParsedXcs {
   if (!isObject(json)) throw new XcsParseError('XCS root must be an object');
 
   const ext_id = typeof json.extId === 'string' ? json.extId : null;
+  const ext_name = typeof json.extName === 'string' ? json.extName : null;
 
   const lightSource = pick<string>(
     json,
@@ -93,6 +95,7 @@ export function parseXcs(input: string | Buffer): ParsedXcs {
 
   return {
     ext_id,
+    ext_name,
     light_source: lightSource ?? null,
     xtool_material_id: xtoolMaterial ?? null,
     layers: deduplicateLayers(layers),

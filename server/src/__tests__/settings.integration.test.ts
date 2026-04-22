@@ -23,6 +23,35 @@ describe('public reference data', () => {
     expect(r.body.data[0].laser_types).toBeDefined();
   });
 
+  it('seeds the design-document device and laser catalog', async () => {
+    const [devices, lasers] = await Promise.all([
+      request(app).get('/api/devices'),
+      request(app).get('/api/laser-types'),
+    ]);
+
+    expect(devices.status).toBe(200);
+    expect(lasers.status).toBe(200);
+
+    const deviceNames = devices.body.data.map((row: { name: string }) => row.name);
+    const laserSlugs = lasers.body.data.map((row: { slug: string }) => row.slug);
+
+    expect(deviceNames).toEqual(expect.arrayContaining([
+      'F2 Ultra (UV)',
+      'F2 Ultra Dual',
+      'F2 Ultra Single',
+      'F2',
+      'SVG Vector Export',
+    ]));
+    expect(laserSlugs).toEqual(expect.arrayContaining([
+      'uv',
+      'mopa',
+      'mopa-single',
+      'blue-ultra',
+      'ir',
+      'blue-f2',
+    ]));
+  });
+
   it('lists materials', async () => {
     const r = await request(app).get('/api/materials');
     expect(r.status).toBe(200);

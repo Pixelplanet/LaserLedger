@@ -22,6 +22,16 @@ export async function seed(knex: Knex): Promise<void> {
     created_at: now,
     updated_at: now,
   });
+  const [virtualId] = await insert(knex, 'manufacturers', {
+    name: 'Virtual',
+    slug: 'virtual',
+    website: null,
+    description: 'Virtual devices used for export-only or non-hardware workflows.',
+    is_active: true,
+    sort_order: 99,
+    created_at: now,
+    updated_at: now,
+  });
 
   // ───── device families ─────
   const [f2FamilyId] = await insert(knex, 'device_families', {
@@ -30,6 +40,15 @@ export async function seed(knex: Knex): Promise<void> {
     slug: 'f2-family',
     description: 'xTool F2 series desktop fiber/diode lasers.',
     sort_order: 0,
+    created_at: now,
+    updated_at: now,
+  });
+  const [virtualFamilyId] = await insert(knex, 'device_families', {
+    manufacturer_id: virtualId,
+    name: 'Virtual Export',
+    slug: 'virtual-export',
+    description: 'Non-hardware device targets for reusable exported settings.',
+    sort_order: 99,
     created_at: now,
     updated_at: now,
   });
@@ -63,27 +82,53 @@ export async function seed(knex: Knex): Promise<void> {
       updated_at: now,
     },
     {
-      name: 'Blue Diode',
-      slug: 'blue-diode',
-      light_source: 'blue',
-      wavelength_nm: 455,
-      has_pulse_width: false,
-      has_mopa_frequency: false,
-      processing_type: 'BLUE_LASER',
+      name: 'MOPA',
+      slug: 'mopa-single',
+      light_source: 'red',
+      wavelength_nm: 1064,
+      has_pulse_width: true,
+      has_mopa_frequency: true,
+      processing_type: 'MOPA_LASER',
       sort_order: 2,
       is_active: true,
       created_at: now,
       updated_at: now,
     },
     {
+      name: 'Blue Diode',
+      slug: 'blue-ultra',
+      light_source: 'blue',
+      wavelength_nm: 455,
+      has_pulse_width: true,
+      has_mopa_frequency: true,
+      processing_type: 'BLUE_LASER',
+      sort_order: 3,
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    },
+    {
       name: 'Infrared',
-      slug: 'infrared',
+      slug: 'ir',
       light_source: 'red',
       wavelength_nm: 1064,
       has_pulse_width: false,
       has_mopa_frequency: false,
       processing_type: 'IR_LASER',
-      sort_order: 3,
+      sort_order: 4,
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    },
+    {
+      name: 'Blue Diode',
+      slug: 'blue-f2',
+      light_source: 'blue',
+      wavelength_nm: 455,
+      has_pulse_width: false,
+      has_mopa_frequency: false,
+      processing_type: 'BLUE_LASER',
+      sort_order: 5,
       is_active: true,
       created_at: now,
       updated_at: now,
@@ -91,8 +136,10 @@ export async function seed(knex: Knex): Promise<void> {
   ]);
   const ltUv = laserTypes[0]!;
   const ltMopa = laserTypes[1]!;
-  const ltBlue = laserTypes[2]!;
-  const ltIr = laserTypes[3]!;
+  const ltMopaSingle = laserTypes[2]!;
+  const ltBlueUltra = laserTypes[3]!;
+  const ltIr = laserTypes[4]!;
+  const ltBlueF2 = laserTypes[5]!;
 
   // ───── devices ─────
   const devices = await insertMany(knex, 'devices', [
@@ -144,6 +191,18 @@ export async function seed(knex: Knex): Promise<void> {
       created_at: now,
       updated_at: now,
     },
+    {
+      family_id: virtualFamilyId,
+      name: 'SVG Vector Export',
+      slug: 'svg-vector-export',
+      ext_id: 'SVG_EXPORT',
+      ext_name: 'SVG Vector Export',
+      description: 'Virtual export target for SVG-based workflows.',
+      is_active: true,
+      sort_order: 99,
+      created_at: now,
+      updated_at: now,
+    },
   ]);
   const f2UltraUv = devices[0]!;
   const f2UltraDual = devices[1]!;
@@ -165,10 +224,10 @@ export async function seed(knex: Knex): Promise<void> {
   await knex('device_laser_types').insert([
     dlt(f2UltraUv, ltUv, true, [5]),
     dlt(f2UltraDual, ltMopa, true, [60, 40]),
-    dlt(f2UltraDual, ltBlue, false, [20]),
-    dlt(f2UltraSingle, ltMopa, true, [60]),
+    dlt(f2UltraDual, ltBlueUltra, false, [20]),
+    dlt(f2UltraSingle, ltMopaSingle, true, [60]),
     dlt(f2, ltIr, true, [2]),
-    dlt(f2, ltBlue, false, [20]),
+    dlt(f2, ltBlueF2, false, [20]),
   ]);
 
   // ───── material categories ─────

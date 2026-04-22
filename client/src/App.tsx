@@ -57,7 +57,6 @@ function Nav() {
           {user ? (
             <>
               <Link to={`/profile/${user.id}`} className="nav-link">{user.display_name}</Link>
-              <Link to="/account" className="nav-link">Account</Link>
               <button onClick={() => logout()} className="nav-link" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
                 Sign out
               </button>

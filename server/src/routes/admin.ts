@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import path from 'node:path';
+import multer from 'multer';
 import { db } from '../db/index.js';
 import { requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
@@ -16,10 +18,42 @@ import {
 } from '@shared/schemas.js';
 import { slugify, nowIso } from '../utils/ids.js';
 import { notFound, badRequest } from '../utils/errors.js';
+import { parseXcs, XcsParseError } from '../services/xcs.js';
 
 const router = Router();
+const xcsUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 router.use(requireRole('admin'));
+
+function suggestLaserTypeSlugs(parsed: {
+  ext_id: string | null;
+  light_source: string | null;
+  layers: { pulse_width: number | null }[];
+}): string[] {
+  const source = parsed.light_source?.toLowerCase() ?? '';
+  const extId = parsed.ext_id?.toLowerCase() ?? '';
+  const hasPulseWidth = parsed.layers.some((layer) => layer.pulse_width !== null);
+
+  if (source.includes('355') || source.includes('uv')) return ['uv'];
+  if (source.includes('455') || source.includes('blue')) {
+    if (extId === 'gs001') return ['blue-f2'];
+    return ['blue-ultra', 'blue-f2'];
+  }
+  if (source.includes('1064') || source.includes('red') || hasPulseWidth) {
+    if (extId === 'gs001') return ['ir'];
+    if (extId === 'gs009-class-1') return ['mopa-single'];
+    if (hasPulseWidth) return ['mopa', 'mopa-single'];
+    return ['ir'];
+  }
+
+  return [];
+}
+
+function inferSuggestedName(originalName: string, parsedName: string | null): string {
+  if (parsedName) return parsedName;
+  const base = path.parse(originalName).name.trim();
+  return base || 'New device';
+}
 
 // Generic CRUD helper
 function crud(
@@ -96,6 +130,40 @@ router.use('/device-families', crud('device_families', DeviceFamilyInput, {
   beforeInsert: (d) => ({ ...d, slug: slugify(String(d.name)) }),
   beforeUpdate: (d) => (d.name ? { ...d, slug: slugify(String(d.name)) } : d),
 }));
+
+router.post('/devices/parse-xcs', xcsUpload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) throw badRequest('Missing file');
+
+    let parsed;
+    try {
+      parsed = parseXcs(req.file.buffer);
+    } catch (error) {
+      if (error instanceof XcsParseError) throw badRequest(error.message);
+      throw error;
+    }
+
+    const existingDevice = parsed.ext_id
+      ? await db('devices').where({ ext_id: parsed.ext_id }).first()
+      : null;
+
+    const suggestedSlugs = suggestLaserTypeSlugs(parsed);
+    const matchingLaserTypes = suggestedSlugs.length === 0
+      ? []
+      : await db('laser_types').whereIn('slug', suggestedSlugs).select('id', 'name', 'slug');
+
+    res.json({
+      data: {
+        parsed,
+        existing_device: existingDevice,
+        matching_laser_types: matchingLaserTypes,
+        suggested_name: inferSuggestedName(req.file.originalname, parsed.ext_name),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.use('/devices', crud('devices', DeviceInput, {
   beforeInsert: (d) => ({ ...d, slug: slugify(String(d.name)) }),

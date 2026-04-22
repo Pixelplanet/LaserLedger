@@ -75,6 +75,41 @@ describe('admin CMS CRUD', () => {
     const r = await request(app).get('/api/admin/tags').set('Cookie', cookies);
     expect(r.status).toBe(403);
   });
+
+  it('parses an XCS file for device import assistance', async () => {
+    const cookies = await adminCookies('admin3@example.com');
+    const xcs = JSON.stringify({
+      extId: 'GS009-CLASS-4',
+      extName: 'F2 Ultra UV',
+      device: {
+        data: {
+          value: [
+            [
+              null,
+              {
+                data: {
+                  LASER_PLANE: { lightSourceMode: '355nm', material: 1323 },
+                },
+              },
+            ],
+          ],
+        },
+      },
+      canvas: [],
+    });
+
+    const r = await request(app)
+      .post('/api/admin/devices/parse-xcs')
+      .set('Origin', ORIGIN)
+      .set('Cookie', cookies)
+      .attach('file', Buffer.from(xcs, 'utf-8'), 'F2 Ultra UV.xcs');
+
+    expect(r.status).toBe(200);
+    expect(r.body.data.parsed.ext_id).toBe('GS009-CLASS-4');
+    expect(r.body.data.parsed.ext_name).toBe('F2 Ultra UV');
+    expect(r.body.data.existing_device?.name).toBe('F2 Ultra (UV)');
+    expect(r.body.data.suggested_name).toBe('F2 Ultra UV');
+  });
 });
 
 describe('public system-settings', () => {

@@ -35,6 +35,7 @@ describe('parseXcs', () => {
     });
     const out = parseXcs(xcs);
     expect(out.ext_id).toBe('GS009-CLASS-4');
+    expect(out.ext_name).toBeNull();
     expect(out.light_source).toBe('355nm');
     expect(out.xtool_material_id).toBe(1323);
     expect(out.layers).toEqual([]);
@@ -110,7 +111,14 @@ describe('parseXcs', () => {
     expect(out.layers[0].frequency).toBeNull();
     expect(out.layers[0].lpi).toBeNull();
     expect(out.ext_id).toBeNull();
+    expect(out.ext_name).toBeNull();
     expect(out.light_source).toBeNull();
+  });
+
+  it('extracts extName when present', () => {
+    const xcs = JSON.stringify({ extId: 'GS001', extName: 'F2' });
+    const out = parseXcs(xcs);
+    expect(out.ext_name).toBe('F2');
   });
 
   it('rejects oversized files', () => {

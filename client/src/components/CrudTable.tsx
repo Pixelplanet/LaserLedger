@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
 import { Button } from './Button';
@@ -18,6 +18,8 @@ interface Props<T extends { id: number | string }> {
   fields: CrudField[];
   displayColumns: { key: keyof T & string; label: string }[];
   emptyLabel?: string;
+  createInitialValues?: Record<string, unknown> | null;
+  createFormVersion?: number;
 }
 
 export function CrudTable<T extends { id: number | string }>({
@@ -26,12 +28,21 @@ export function CrudTable<T extends { id: number | string }>({
   fields,
   displayColumns,
   emptyLabel = 'No entries yet.',
+  createInitialValues = null,
+  createFormVersion,
 }: Props<T>) {
   const qc = useQueryClient();
   const list = useQuery({ queryKey: [queryKey], queryFn: () => api<T[]>(endpoint) });
   const [editing, setEditing] = useState<T | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!createInitialValues) return;
+    setShowForm(true);
+    setEditing(null);
+    setErr(null);
+  }, [createInitialValues, createFormVersion]);
 
   function refresh() {
     qc.invalidateQueries({ queryKey: [queryKey] });
@@ -101,9 +112,9 @@ export function CrudTable<T extends { id: number | string }>({
       {err && <ErrorBlock>{err}</ErrorBlock>}
 
       {showForm && (
-        <form className="form" onSubmit={onCreate}>
+        <form key={createFormVersion ?? 0} className="form" onSubmit={onCreate}>
           {fields.map((f) => (
-            <CrudFieldInput key={f.key} field={f} value={undefined} />
+            <CrudFieldInput key={f.key} field={f} value={createInitialValues?.[f.key]} />
           ))}
           <Button type="submit" variant="primary" size="sm" disabled={create.isPending}>
             {create.isPending ? 'Saving…' : 'Create'}
