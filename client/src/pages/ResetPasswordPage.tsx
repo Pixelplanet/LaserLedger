@@ -13,7 +13,7 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setError(null);
     try {
-      await api('/auth/reset-password', { method: 'POST', body: { token, password } });
+      await api('/auth/reset-password', { method: 'POST', body: { token, new_password: password } });
       setStatus('done');
     } catch (err) {
       setStatus('error');

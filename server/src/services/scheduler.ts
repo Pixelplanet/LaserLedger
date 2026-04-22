@@ -12,16 +12,21 @@ import type { User } from '@shared/types.js';
  * §1.28
  */
 export async function bootstrapAdmin(): Promise<void> {
-  if (!env.ADMIN_EMAIL || !env.ADMIN_INITIAL_PASSWORD) return;
+  const adminEmail = env.ADMIN_EMAIL.toLowerCase().trim();
+  const adminPassword = env.ADMIN_INITIAL_PASSWORD;
+  if (!adminEmail || !adminPassword) return;
+
   const existing = await db('users').where({ role: 'admin' }).first();
   if (existing) return;
+
   const id = hexId();
   const now = nowIso();
+  const passwordHash = await hashPassword(adminPassword);
   await db('users').insert({
     id,
-    email: env.ADMIN_EMAIL,
+    email: adminEmail,
     display_name: 'Admin',
-    password_hash: await hashPassword(env.ADMIN_INITIAL_PASSWORD),
+    password_hash: passwordHash,
     google_id: null,
     role: 'admin',
     email_verified: true,
@@ -36,7 +41,7 @@ export async function bootstrapAdmin(): Promise<void> {
     last_login_at: null,
   });
   // eslint-disable-next-line no-console
-  console.log(`[laserledger] bootstrapped admin user ${env.ADMIN_EMAIL}`);
+  console.log(`[laserledger] bootstrapped admin user ${adminEmail}`);
 }
 
 /**
