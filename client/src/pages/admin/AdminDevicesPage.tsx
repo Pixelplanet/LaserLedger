@@ -2,6 +2,8 @@ import { useState } from 'react';
 import PageBlock from '../../components/PageBlock';
 import { CrudTable } from '../../components/CrudTable';
 import { ErrorBlock } from '../../components/States';
+import { UploadProgress } from '../../components/UploadProgress';
+import { uploadFileWithProgress, type UploadProgressState } from '../../lib/upload-progress';
 
 interface Device { id: number; name: string; slug: string; family_id: number | null; ext_id: string | null }
 interface Family { id: number; name: string; slug: string; manufacturer_id: number | null }
@@ -22,22 +24,16 @@ export default function AdminDevicesPage() {
   const [importData, setImportData] = useState<ParsedImport | null>(null);
   const [importErr, setImportErr] = useState<string | null>(null);
   const [importBusy, setImportBusy] = useState(false);
+  const [importProgress, setImportProgress] = useState<UploadProgressState | null>(null);
   const [createFormVersion, setCreateFormVersion] = useState(0);
 
   async function onImport(file: File) {
     setImportBusy(true);
     setImportErr(null);
+    setImportProgress(null);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch('/api/admin/devices/parse-xcs', {
-        method: 'POST',
-        credentials: 'include',
-        body: fd,
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error?.message ?? 'XCS parse failed');
-      setImportData(json.data as ParsedImport);
+      const data = await uploadFileWithProgress<ParsedImport>('/api/admin/devices/parse-xcs', 'file', file, setImportProgress);
+      setImportData(data);
       setCreateFormVersion((current) => current + 1);
     } catch (error) {
       setImportErr(error instanceof Error ? error.message : 'XCS parse failed');
@@ -62,6 +58,7 @@ export default function AdminDevicesPage() {
             }}
           />
         </label>
+        <UploadProgress state={importProgress} />
         <p className="hint">This extracts the XCS extId and suggested device name, then prefills the device form below. You still choose the family ID manually.</p>
         {importErr && <ErrorBlock>{importErr}</ErrorBlock>}
         {importData && (

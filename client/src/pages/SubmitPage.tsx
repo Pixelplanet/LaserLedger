@@ -4,11 +4,13 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import PageBlock from '../components/PageBlock';
 import { api, ApiError } from '../lib/api';
 import { Button } from '../components/Button';
+import { UploadProgress } from '../components/UploadProgress';
+import { uploadFileWithProgress, type UploadProgressState } from '../lib/upload-progress';
 
 interface RefRow { id: number; name: string; ext_id?: string | null; xtool_material_id?: string | null }
 interface CreateResp { uuid: string }
 interface ParseResp {
-  parsed: Record<string, unknown>;
+  parsed: Record<string, unknown> & { layers?: Record<string, unknown>[] };
   resolved: { device: { id: number } | null; material: { id: number } | null };
   warnings: string[];
 }
@@ -50,32 +52,30 @@ export default function SubmitPage() {
   const [err, setErr] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [parsing, setParsing] = useState(false);
+  const [xcsProgress, setXcsProgress] = useState<UploadProgressState | null>(null);
 
   async function onXcsFile(file: File) {
     setErr(null);
     setWarnings([]);
+    setXcsProgress(null);
     setParsing(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch('/api/settings/parse-xcs', { method: 'POST', credentials: 'include', body: fd });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error?.message ?? 'XCS parse failed');
-      const p = json.data as ParseResp;
+      const p = await uploadFileWithProgress<ParseResp>('/api/settings/parse-xcs', 'file', file, setXcsProgress);
       const parsed = p.parsed as Record<string, unknown>;
+      const firstLayer = Array.isArray(p.parsed.layers) ? p.parsed.layers[0] ?? {} : {};
       setForm((f) => ({
         ...f,
         title: f.title || (typeof parsed.title === 'string' ? parsed.title : f.title),
         device_id: p.resolved.device ? String(p.resolved.device.id) : f.device_id,
         material_id: p.resolved.material ? String(p.resolved.material.id) : f.material_id,
-        power: parsed.power != null ? String(parsed.power) : f.power,
-        speed: parsed.speed != null ? String(parsed.speed) : f.speed,
-        passes: parsed.passes != null ? String(parsed.passes) : f.passes,
-        frequency: parsed.frequency != null ? String(parsed.frequency) : f.frequency,
-        lpi: parsed.lpi != null ? String(parsed.lpi) : f.lpi,
-        pulse_width: parsed.pulse_width != null ? String(parsed.pulse_width) : f.pulse_width,
+        power: firstLayer.power != null ? String(firstLayer.power) : parsed.power != null ? String(parsed.power) : f.power,
+        speed: firstLayer.speed != null ? String(firstLayer.speed) : parsed.speed != null ? String(parsed.speed) : f.speed,
+        passes: firstLayer.passes != null ? String(firstLayer.passes) : parsed.passes != null ? String(parsed.passes) : f.passes,
+        frequency: firstLayer.frequency != null ? String(firstLayer.frequency) : parsed.frequency != null ? String(parsed.frequency) : f.frequency,
+        lpi: firstLayer.lpi != null ? String(firstLayer.lpi) : parsed.lpi != null ? String(parsed.lpi) : f.lpi,
+        pulse_width: firstLayer.pulse_width != null ? String(firstLayer.pulse_width) : parsed.pulse_width != null ? String(parsed.pulse_width) : f.pulse_width,
         focus_offset: parsed.focus_offset != null ? String(parsed.focus_offset) : f.focus_offset,
-        scan_mode: typeof parsed.scan_mode === 'string' ? parsed.scan_mode : f.scan_mode,
+        scan_mode: typeof firstLayer.scan_mode === 'string' ? firstLayer.scan_mode : typeof parsed.scan_mode === 'string' ? parsed.scan_mode : f.scan_mode,
       }));
       setWarnings(p.warnings ?? []);
     } catch (e) {
@@ -145,6 +145,7 @@ export default function SubmitPage() {
             }}
           />
         </label>
+        <UploadProgress state={xcsProgress} />
         {parsing && <p className="hint">Parsing…</p>}
         {warnings.length > 0 && (
           <ul className="hint">

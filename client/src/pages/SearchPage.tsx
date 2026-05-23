@@ -86,14 +86,17 @@ export default function SearchPage() {
   const meta = search.data?.meta;
 
   return (
-    <PageBlock title="Search" subtitle="Filter by device, laser, material, operation, and more.">
-      <div className="split">
-        <aside className="panel" style={{ margin: 0 }}>
-          <form className="form" onSubmit={onSubmit}>
+    <PageBlock title="Browse settings" subtitle="Filter by device, laser, material, operation, and more.">
+      <div className="browse-layout">
+        <aside className="browse-sidebar">
+          <form className="form" onSubmit={onSubmit} style={{ maxWidth: 'none' }}>
+            <h2>Search</h2>
             <label>
               Keyword
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. anodized aluminum" />
             </label>
+
+            <h2>Hardware</h2>
             <label>
               Device
               <select value={params.get('device') ?? ''} onChange={(e) => setParam('device', e.target.value)}>
@@ -112,6 +115,8 @@ export default function SearchPage() {
                 ))}
               </select>
             </label>
+
+            <h2>Material &amp; operation</h2>
             <label>
               Material
               <select value={params.get('material') ?? ''} onChange={(e) => setParam('material', e.target.value)}>
@@ -130,39 +135,65 @@ export default function SearchPage() {
                 ))}
               </select>
             </label>
+
+            <h2>Sort</h2>
             <label>
-              Sort
               <select value={params.get('sort') ?? 'relevance'} onChange={(e) => setParam('sort', e.target.value)}>
                 {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </label>
-            <button className="btn primary" type="submit">Apply</button>
+            <button className="btn primary block" type="submit">Apply filters</button>
           </form>
         </aside>
 
         <section>
-          {search.isLoading && <p className="hint">Loading…</p>}
+          <div className="browse-toolbar">
+            <span className="browse-results-count">
+              {search.isLoading
+                ? 'Loading…'
+                : meta
+                  ? `${meta.total.toLocaleString()} setting${meta.total === 1 ? '' : 's'}`
+                  : ''}
+            </span>
+          </div>
           {search.isError && <p className="err">Failed to load results.</p>}
           {!search.isLoading && rows.length === 0 && (
             <div className="empty">No settings match these filters yet.</div>
           )}
           <div className="results-grid">
-            {rows.map((s) => (
-              <Link key={s.uuid} to={`/settings/${s.uuid}`} className="card">
-                <img className="thumb" src={imgUrl(s.primary_image_card) ?? ''} alt={s.title} loading="lazy" />
-                <h3>{s.title}</h3>
-                <div className="meta">
-                  {s.device_name && <span className="tag muted">{s.device_name}</span>}
-                  {s.laser_type_name && <span className="tag muted">{s.laser_type_name}</span>}
-                  {s.material_name && <span className="tag muted">{s.material_name}</span>}
-                </div>
-                <div className="meta">
-                  ▲ {s.vote_score} · 👁 {s.view_count}
-                  {s.power != null && ` · ${s.power}% pwr`}
-                  {s.speed != null && ` · ${s.speed} mm/s`}
-                </div>
-              </Link>
-            ))}
+            {rows.map((s) => {
+              const img = imgUrl(s.primary_image_card);
+              return (
+                <Link key={s.uuid} to={`/settings/${s.uuid}`} className="tile">
+                  <div className="tile-media">
+                    {img ? (
+                      <img src={img} alt={s.title} loading="lazy" />
+                    ) : null}
+                    <div className="tile-badges">
+                      {s.operation_type_name && (
+                        <span className="tag solid">{s.operation_type_name}</span>
+                      )}
+                    </div>
+                    <div className="tile-stats">
+                      <span>▲ {s.vote_score}</span>
+                      <span>👁 {s.view_count}</span>
+                    </div>
+                  </div>
+                  <div className="tile-body">
+                    <h3 className="tile-title">{s.title}</h3>
+                    <div className="tile-meta">
+                      {s.material_name && <span className="tag muted">{s.material_name}</span>}
+                      {s.laser_type_name && <span className="tag muted">{s.laser_type_name}</span>}
+                    </div>
+                    <div className="tile-author">
+                      {s.device_name ?? 'Unknown device'}
+                      {s.power != null && ` · ${s.power}% pwr`}
+                      {s.speed != null && ` · ${s.speed} mm/s`}
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
           {meta && meta.total > meta.pageSize && (
             <div className="toolbar" style={{ marginTop: '1rem', justifyContent: 'space-between' }}>

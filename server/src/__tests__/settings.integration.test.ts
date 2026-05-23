@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
+import { db } from '../db/index.js';
 
 const app = createApp();
 const ORIGIN = 'http://localhost:5173';
@@ -83,6 +84,32 @@ describe('settings flow', () => {
       });
     expect(r.status).toBe(403);
   });
+
+    it('parses partial XCS data and returns warnings for unknown references', async () => {
+      const email = 'partial-xcs@example.com';
+      const cookies = await registerAndLogin(email);
+      await db('users').where({ email }).update({ email_verified: true });
+      const xcs = JSON.stringify({
+        device: { extId: 'UNSEEDED-LASER', name: 'Unseeded Laser' },
+        project: { materialId: '999999' },
+        objects: [{ settings: { power: '55', speed: '900', repeat: '3' } }],
+      });
+
+      const r = await request(app)
+        .post('/api/settings/parse-xcs')
+        .set('Origin', ORIGIN)
+        .set('Cookie', cookies)
+        .attach('file', Buffer.from(xcs, 'utf-8'), 'unknown-device.xcs');
+
+      expect(r.status).toBe(200);
+      expect(r.body.data.parsed.ext_id).toBe('UNSEEDED-LASER');
+      expect(r.body.data.parsed.xtool_material_id).toBe(999999);
+      expect(r.body.data.parsed.layers[0].power).toBe(55);
+      expect(r.body.data.warnings).toEqual(expect.arrayContaining([
+        'Unknown device extId: UNSEEDED-LASER',
+        'Unknown xTool material id: 999999',
+      ]));
+    });
 });
 
 describe('search', () => {

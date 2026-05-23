@@ -21,6 +21,16 @@ export function buildSearchQuery(
     .leftJoin('materials as m', 'm.id', 's.material_id')
     .leftJoin('material_categories as mc', 'mc.id', 'm.category_id')
     .leftJoin('operation_types as ot', 'ot.id', 's.operation_type_id')
+    .leftJoin('setting_images as si', function joinPrimaryImage() {
+      this.on('si.setting_id', '=', 's.id').andOn(
+        'si.id',
+        '=',
+        knex.raw(
+          "(SELECT id FROM setting_images WHERE setting_id = s.id AND is_primary = ? AND status = 'approved' ORDER BY id ASC LIMIT 1)",
+          [true],
+        ),
+      );
+    })
     .whereIn('s.status', includeStatus);
 
   // Multi-select filters (comma-separated id lists)
@@ -141,6 +151,8 @@ export function buildSearchQuery(
     'ot.id as operation_type_id',
     'ot.name as operation_type_name',
     'ot.slug as operation_type_slug',
+    'si.card_path as primary_image_card',
+    'si.thumbnail_path as primary_image_thumb',
   );
 
   // Pagination

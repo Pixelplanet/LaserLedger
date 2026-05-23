@@ -121,6 +121,39 @@ describe('parseXcs', () => {
     expect(out.ext_name).toBe('F2');
   });
 
+  it('extracts partial data from nonstandard XCS shapes', () => {
+    const xcs = JSON.stringify({
+      device: { extId: 'UNKNOWN-DEVICE', name: 'Prototype Laser' },
+      project: { materialId: '458' },
+      objects: [
+        {
+          settings: {
+            power: '44.5',
+            speed: '1200',
+            frequency: '30',
+            density: '254',
+            pulseWidth: '100',
+            repeat: '2',
+          },
+        },
+      ],
+    });
+
+    const out = parseXcs(xcs);
+
+    expect(out.ext_id).toBe('UNKNOWN-DEVICE');
+    expect(out.ext_name).toBe('Prototype Laser');
+    expect(out.xtool_material_id).toBe(458);
+    expect(out.layers[0]).toMatchObject({
+      power: 44.5,
+      speed: 1200,
+      frequency: 30,
+      lpi: 254,
+      pulse_width: 100,
+      passes: 2,
+    });
+  });
+
   it('rejects oversized files', () => {
     const huge = 'x'.repeat(6 * 1024 * 1024);
     expect(() => parseXcs(huge)).toThrow(XcsParseError);

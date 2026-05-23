@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import multer from 'multer';
 import { AppError } from '../utils/errors.js';
 import { ZodError } from 'zod';
 import { isProd, isTest } from '../config.js';
@@ -23,6 +24,16 @@ export function errorHandler(
   if (err instanceof ZodError) {
     res.status(422).json({
       error: { code: 'validation_error', message: 'Validation failed', details: err.flatten() },
+    });
+    return;
+  }
+  if (err instanceof multer.MulterError) {
+    const isTooLarge = err.code === 'LIMIT_FILE_SIZE';
+    res.status(isTooLarge ? 413 : 400).json({
+      error: {
+        code: isTooLarge ? 'payload_too_large' : 'bad_request',
+        message: isTooLarge ? 'Uploaded file is too large' : err.message,
+      },
     });
     return;
   }
