@@ -17,6 +17,27 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Optional one-shot demo data load. Gated so it never fires in real prod
+  // unless someone explicitly sets the env var (and the seed itself is
+  // idempotent — it skips when the demo user already exists).
+  if (process.env.SEED_DEMO_DATA === 'true') {
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[laserledger] SEED_DEMO_DATA=true → running seeds…');
+      const result = await db.seed.run();
+      // eslint-disable-next-line no-console
+      console.log(
+        `[laserledger] seeds complete: ${result[0]?.length ?? 0} file(s) executed`,
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[laserledger] seed run failed:', err);
+    }
+  } else {
+    // eslint-disable-next-line no-console
+    console.log('[laserledger] SEED_DEMO_DATA not set, skipping demo seed');
+  }
+
   await bootstrapAdmin().catch((err) => {
     // eslint-disable-next-line no-console
     console.error('[laserledger] admin bootstrap failed:', err);

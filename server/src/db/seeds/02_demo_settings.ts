@@ -41,13 +41,19 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './uploads';
  * already exists.
  */
 export async function seed(knex: Knex): Promise<void> {
-  if (process.env.SEED_DEMO_DATA !== 'true') return;
+  if (process.env.SEED_DEMO_DATA !== 'true') {
+    // eslint-disable-next-line no-console
+    console.log('[seed:demo] SEED_DEMO_DATA != "true", skipping');
+    return;
+  }
+  // eslint-disable-next-line no-console
+  console.log(`[seed:demo] starting (UPLOAD_DIR=${UPLOAD_DIR})`);
 
   const demoEmail = 'demo@laserledger.local';
   const existing = await knex('users').where({ email: demoEmail }).first<{ id: string }>();
   if (existing) {
     // eslint-disable-next-line no-console
-    console.log('[seed:demo] demo user already exists, skipping');
+    console.log(`[seed:demo] demo user already exists (id=${existing.id}), skipping`);
     return;
   }
 
