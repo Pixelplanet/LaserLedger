@@ -127,6 +127,8 @@ router.get('/uploads/images/:year/:month/:id/:variant', (req, res, next) => {
   try {
     const { year, month, id, variant } = req.params;
     const abs = imageVariantPath(year!, month!, id!, variant!);
+    // Paths embed an immutable per-upload UUID, so we can cache aggressively.
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     res.sendFile(path.resolve(abs), (err) => {
       if (err) next(notFound('Image not found'));
     });
