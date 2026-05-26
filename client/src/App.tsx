@@ -25,6 +25,8 @@ import PrivacyPage from './pages/PrivacyPage';
 import NotFoundPage from './pages/NotFoundPage';
 import { RequireAuth, RequireRole } from './components/RouteGuards';
 import { DonationWidget } from './components/DonationWidget';
+import { CookieBanner } from './components/CookieBanner';
+import { openCookieSettings } from './lib/consent';
 import { useAuthStore } from './lib/auth-store';
 
 function Nav() {
@@ -94,6 +96,15 @@ function AppFooter() {
         <a href="https://github.com/Pixelplanet/LaserLedger" target="_blank" rel="noopener noreferrer" className="footer-link">GitHub</a>
         <span className="footer-sep">·</span>
         <Link to="/privacy" className="footer-link">Privacy Policy</Link>
+        <span className="footer-sep">·</span>
+        <button
+          type="button"
+          className="footer-link"
+          onClick={() => openCookieSettings()}
+          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}
+        >
+          Cookie settings
+        </button>
       </div>
     </footer>
   );
@@ -135,6 +146,7 @@ export default function App() {
         </Routes>
       </main>
       <AppFooter />
+      <CookieBanner />
     </div>
   );
 }

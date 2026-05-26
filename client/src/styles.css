@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+/* Google Fonts are NOT imported here. They are injected dynamically by
+   client/src/lib/consent.ts when the user grants the "preferences" cookie
+   category. Until then the font-family stacks below fall back to system fonts. */
 @import "tailwindcss";
 
 :root {
@@ -622,6 +624,94 @@ code {
 .skeleton-hero { aspect-ratio: 4 / 3; width: 100%; }
 .skeleton-line { height: 14px; margin: 0.6rem 0; }
 .skeleton-line.lg { height: 28px; width: 60%; }
+
+/* ─── Cookie banner ─────────────────────────────────────────────────────── */
+.cookie-banner-root {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 500;
+  display: flex;
+  justify-content: center;
+  padding: clamp(0.5rem, 2vw, 1.25rem);
+  pointer-events: none;
+}
+.cookie-banner {
+  pointer-events: auto;
+  max-width: 880px;
+  width: 100%;
+  background: linear-gradient(180deg, rgba(33, 38, 45, 0.97), rgba(13, 17, 23, 0.98));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.1rem 1.25rem;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+}
+.cookie-banner-text h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+}
+.cookie-banner-text p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.cookie-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+.cookie-banner-actions .btn.ghost {
+  background: rgba(33, 38, 45, 0.55);
+}
+.cookie-categories {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.cookie-cat {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 0.7rem;
+  align-items: start;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(13, 17, 23, 0.55);
+  cursor: pointer;
+}
+.cookie-cat input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  margin-top: 0.15rem;
+  accent-color: var(--accent);
+}
+.cookie-cat input[disabled] { opacity: 0.6; cursor: not-allowed; }
+.cookie-cat strong { display: block; font-size: 0.92rem; margin-bottom: 0.2rem; }
+.cookie-cat p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.cookie-cat code {
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78em;
+  background: rgba(48, 54, 61, 0.55);
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+}
+@media (max-width: 640px) {
+  .cookie-banner-actions { justify-content: stretch; }
+  .cookie-banner-actions .btn { flex: 1; }
+}
+
 .skeleton-block { height: 220px; margin-top: 1rem; }
 @keyframes shimmer {
   0% { background-position: 200% 0; }
