@@ -114,19 +114,6 @@ export default function PrivacyPage() {
               <td>§&nbsp;25(2) TTDSG (required to honour your choice)</td>
             </tr>
             <tr>
-              <td>Google Fonts cache</td>
-              <td>Google Ireland Ltd. / Google LLC (USA)</td>
-              <td>Preferences (optional)</td>
-              <td>
-                Downloads the Inter and IBM Plex Mono webfonts from
-                <code> fonts.googleapis.com</code> and <code>fonts.gstatic.com</code>.
-                Transmits your IP address to Google. Only loaded if you accept the
-                &ldquo;Preferences&rdquo; category.
-              </td>
-              <td>Browser HTTP cache (typ. up to 1&nbsp;year)</td>
-              <td>Art. 6(1)(a) GDPR, §&nbsp;25(1) TTDSG (consent)</td>
-            </tr>
-            <tr>
               <td>Google Sign-In cookies</td>
               <td>Google Ireland Ltd. / Google LLC (USA)</td>
               <td>Third-party sign-in (optional)</td>
@@ -216,7 +203,7 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Google Ireland Ltd. / Google LLC</strong> &mdash; only if you opted in to
-          Google Fonts or Sign in with Google (see sections 4 and 6).
+          Sign in with Google (see section 6).
         </li>
       </ul>
       <p>We do not sell, rent or trade personal data.</p>

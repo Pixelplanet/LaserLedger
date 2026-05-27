@@ -1,6 +1,5 @@
-/* Google Fonts are NOT imported here. They are injected dynamically by
-   client/src/lib/consent.ts when the user grants the "preferences" cookie
-   category. Until then the font-family stacks below fall back to system fonts. */
+/* Webfonts (Inter, IBM Plex Mono) are self-hosted and imported from
+   @fontsource packages in client/src/main.tsx. No third-party font CDN is used. */
 @import "tailwindcss";
 
 :root {

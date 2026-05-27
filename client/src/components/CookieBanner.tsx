@@ -45,7 +45,6 @@ export function CookieBanner() {
   const handleSave = () =>
     close(
       setConsent({
-        preferences: draft.preferences,
         auth_third_party: draft.auth_third_party,
       }),
     );
@@ -64,9 +63,9 @@ export function CookieBanner() {
               <h2 id="cookie-banner-title">We respect your privacy</h2>
               <p>
                 LaserLedger uses a strictly necessary session cookie to keep you signed in.
-                Optional categories below load resources from third parties (Google Fonts,
-                Google Sign-In) only if you allow them. No analytics or advertising trackers
-                are used.{' '}
+                The only optional category below is &ldquo;Sign in with Google&rdquo;, which
+                loads a Google script only if you allow it. No analytics, advertising
+                trackers or third-party fonts are used.{' '}
                 <Link to="/privacy" className="footer-link">
                   Read the full privacy policy
                 </Link>
@@ -116,25 +115,6 @@ export function CookieBanner() {
                       Session cookie (<code>ll_session</code>, HTTP-only, SameSite=Lax) and
                       CSRF token. Required to sign in and submit content. Stored only on
                       <code> laserledger</code> (first party).
-                    </p>
-                  </div>
-                </label>
-              </li>
-              <li>
-                <label className="cookie-cat">
-                  <input
-                    type="checkbox"
-                    checked={draft.preferences}
-                    onChange={(e) =>
-                      setDraft((d) => ({ ...d, preferences: e.target.checked }))
-                    }
-                  />
-                  <div>
-                    <strong>Preferences — Google Fonts</strong>
-                    <p>
-                      Loads the Inter and IBM Plex Mono webfonts from
-                      <code> fonts.googleapis.com</code>. Your IP address is transmitted to
-                      Google (USA). If declined, the site falls back to system fonts.
                     </p>
                   </div>
                 </label>
