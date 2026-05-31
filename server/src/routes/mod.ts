@@ -53,6 +53,34 @@ router.get('/settings/pending', async (_req, res, next) => {
   }
 });
 
+// ─── Flagged settings (community reported failures) ────────────────────────
+router.get('/settings/flagged', async (_req, res, next) => {
+  try {
+    const rows = await db('laser_settings as s')
+      .leftJoin('users as u', 'u.id', 's.submitted_by')
+      .leftJoin('devices as d', 'd.id', 's.device_id')
+      .leftJoin('materials as m', 'm.id', 's.material_id')
+      .where('s.status', 'approved')
+      .andWhere('s.verified_failed_count', '>', 0)
+      .andWhereRaw('s.verified_failed_count >= s.verified_worked_count')
+      .orderBy('s.verified_failed_count', 'desc')
+      .limit(50)
+      .select(
+        's.uuid',
+        's.title',
+        's.verified_worked_count',
+        's.verified_failed_count',
+        's.created_at',
+        'u.display_name as author_name',
+        'd.name as device_name',
+        'm.name as material_name',
+      );
+    res.json({ data: rows });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // ─── Setting duplicate check ───────────────────────────────────────────────
 router.get('/settings/:uuid/duplicates', async (req, res, next) => {
   try {
@@ -213,6 +241,44 @@ router.post('/settings/:uuid/archive', async (req, res, next) => {
       moderator_id: mod.id,
       target_type: 'setting',
       target_id: setting.id,
+      action: 'archive',
+      reason: null,
+      notes: null,
+      created_at: now,
+    });
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ─── Public collections (moderation review) ────────────────────────────────
+router.get('/collections', async (_req, res, next) => {
+  try {
+    const rows = await db('collections as c')
+      .leftJoin('users as u', 'u.id', 'c.user_id')
+      .where('c.is_public', true)
+      .orderBy('c.updated_at', 'desc')
+      .limit(100)
+      .select('c.uuid', 'c.name', 'c.description', 'c.updated_at', 'u.display_name as author_name');
+    res.json({ data: rows });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ─── Unpublish a collection ────────────────────────────────────────────────
+router.post('/collections/:uuid/unpublish', async (req, res, next) => {
+  try {
+    const mod = req.user!;
+    const collection = await db('collections').where({ uuid: req.params.uuid }).first();
+    if (!collection) throw notFound('Collection not found');
+    const now = nowIso();
+    await db('collections').where({ id: collection.id }).update({ is_public: false, updated_at: now });
+    await db('moderation_log').insert({
+      moderator_id: mod.id,
+      target_type: 'collection',
+      target_id: collection.id,
       action: 'archive',
       reason: null,
       notes: null,

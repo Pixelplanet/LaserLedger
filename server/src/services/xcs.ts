@@ -1,9 +1,12 @@
 /**
- * XCS file parser — extracts laser parameters from xTool Creative Space files.
- * Reference: DESIGN_DOCUMENT §9.
+ * xTool file parser — extracts laser parameters from both xTool Creative
+ * Space v1 (`.xcs`, monolithic JSON) and xTool Studio v2 (`.xs`, ZIP archive)
+ * files. Reference: DESIGN_DOCUMENT §9 and docs/XS_FORMAT.md.
  *
- * Strict extraction only — never evaluates XCS contents (security: §16.3).
+ * Strict extraction only — never evaluates file contents (security: §16.3).
  */
+
+import { parseXsV2, isXsZipBuffer } from './xs.js';
 
 export interface ParsedXcsLayer {
   power: number | null;
@@ -33,10 +36,20 @@ export class XcsParseError extends Error {
   }
 }
 
-const MAX_XCS_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_XCS_BYTES = 15 * 1024 * 1024; // 15 MB (covers .xs ZIPs with cover images)
 
-/** Parse an XCS file (raw text or buffer) into structured fields. */
+/**
+ * Parse an xTool file (raw text or buffer) into structured fields.
+ *
+ * Auto-detects format by buffer magic: `PK\x03\x04` → v2 `.xs` ZIP,
+ * otherwise treated as v1 `.xcs` JSON.
+ */
 export function parseXcs(input: string | Buffer): ParsedXcs {
+  if (Buffer.isBuffer(input)) {
+    if (input.length === 0) throw new XcsParseError('Empty XCS file');
+    if (input.length > MAX_XCS_BYTES) throw new XcsParseError('XCS file too large');
+    if (isXsZipBuffer(input)) return parseXsV2(input);
+  }
   const text = Buffer.isBuffer(input) ? input.toString('utf-8') : input;
   if (text.length === 0) throw new XcsParseError('Empty XCS file');
   if (text.length > MAX_XCS_BYTES) throw new XcsParseError('XCS file too large');

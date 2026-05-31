@@ -12,7 +12,15 @@ interface Profile {
   submission_count: number;
   reputation: number;
   created_at: string;
+  badges: { slug: string; label: string; description: string }[];
   recent_submissions: { uuid: string; title: string; vote_score: number; view_count: number; created_at: string }[];
+}
+
+interface PublicCollection {
+  uuid: string;
+  name: string;
+  description: string | null;
+  item_count?: number;
 }
 
 export default function ProfilePage() {
@@ -26,6 +34,12 @@ export default function ProfilePage() {
     enabled: !!id,
   });
 
+  const collections = useQuery({
+    queryKey: ['profile-collections', id],
+    queryFn: () => api<PublicCollection[]>(`/users/${id}/collections`),
+    enabled: !!id,
+  });
+
   if (profile.isLoading) return <PageBlock title="Loading…" />;
   if (profile.isError || !profile.data) return <PageBlock title="Profile not found" />;
   const p = profile.data;
@@ -36,6 +50,13 @@ export default function ProfilePage() {
       subtitle={`${p.submission_count} submissions · ${p.reputation} rep · joined ${new Date(p.created_at).toLocaleDateString()}`}
     >
       {p.bio && <p>{p.bio}</p>}
+      {p.badges && p.badges.length > 0 && (
+        <div className="tag-cloud">
+          {p.badges.map((b) => (
+            <span key={b.slug} className="tag solid" title={b.description}>{b.label}</span>
+          ))}
+        </div>
+      )}
       {isOwn && (
         <div className="toolbar">
           <Link to="/submit" className="btn primary sm">New submission</Link>
@@ -43,6 +64,19 @@ export default function ProfilePage() {
           {me?.role === 'admin' && <Link to="/admin" className="btn sm">Admin dashboard</Link>}
           <Link to="/forgot-password" className="btn sm">Change password</Link>
         </div>
+      )}
+      {collections.data && collections.data.length > 0 && (
+        <>
+          <h2 style={{ marginTop: '1rem' }}>Public collections</h2>
+          <div className="results-grid">
+            {collections.data.map((c) => (
+              <Link key={c.uuid} to={`/collections/${c.uuid}`} className="card">
+                <h3>{c.name}</h3>
+                <div className="meta">{c.item_count ?? 0} settings</div>
+              </Link>
+            ))}
+          </div>
+        </>
       )}
       <h2 style={{ marginTop: '1rem' }}>Recent submissions</h2>
       {p.recent_submissions.length === 0 ? (

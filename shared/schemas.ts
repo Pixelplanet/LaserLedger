@@ -10,7 +10,7 @@ export type SettingStatus = z.infer<typeof SettingStatus>;
 export const ImageStatus = z.enum(['pending', 'approved', 'rejected', 'archived']);
 export type ImageStatus = z.infer<typeof ImageStatus>;
 
-export const ReportTargetType = z.enum(['setting', 'comment', 'image']);
+export const ReportTargetType = z.enum(['setting', 'comment', 'image', 'collection']);
 export type ReportTargetType = z.infer<typeof ReportTargetType>;
 
 export const ReportReason = z.enum([
@@ -89,6 +89,7 @@ export const SettingInput = z.object({
   quality_rating: z.number().int().min(1).max(5).nullable().optional(),
   tags: z.array(z.string().min(1).max(50)).max(20).optional(),
   source_xcs: z.string().max(5_000_000).nullable().optional(),
+  source_format: z.enum(['xcs', 'xs']).nullable().optional(),
 });
 export type SettingInput = z.infer<typeof SettingInput>;
 
@@ -235,6 +236,24 @@ export const ReportInput = z.object({
   description: z.string().max(2000).optional().nullable(),
 });
 export type ReportInput = z.infer<typeof ReportInput>;
+
+export const VerifyInput = z.object({
+  outcome: z.enum(['worked', 'partial', 'failed']),
+  note: z.string().max(1000).optional().nullable(),
+});
+export type VerifyInput = z.infer<typeof VerifyInput>;
+
+export const CollectionInput = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().max(2000).optional().nullable(),
+  is_public: z.boolean().optional(),
+});
+export type CollectionInput = z.infer<typeof CollectionInput>;
+
+export const CollectionItemInput = z.object({
+  setting_uuid: z.string().uuid(),
+});
+export type CollectionItemInput = z.infer<typeof CollectionItemInput>;
 
 // ─── Moderation ────────────────────────────────────────────────────────────
 export const RejectInput = z.object({

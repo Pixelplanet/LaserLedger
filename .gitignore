@@ -34,6 +34,14 @@ npm-debug.log*
 # TypeScript cache
 *.tsbuildinfo
 
+# Stray compiled JS from `tsc -b` next to TS sources (never commit these)
+/vitest.config.js
+/playwright.config.js
+client/vite.config.js
+client/vitest.config.js
+scripts/*.js
+tests/e2e/*.js
+
 # Test coverage
 coverage/
 

@@ -104,4 +104,31 @@ describe('moderation flow', () => {
     const r = await request(app).get('/api/mod/settings/pending').set('Cookie', userCookies);
     expect(r.status).toBe(403);
   });
+
+  it('lists community-flagged settings (more failures than successes)', async () => {
+    const authorCookies = await makeUser('flag-author@example.com');
+    const modCookies = await makeUser('mod-flag@example.com', 'moderator');
+    const uuid = await submit(authorCookies, 'Flagged recipe');
+    await request(app)
+      .post(`/api/mod/settings/${uuid}/approve`)
+      .set('Origin', ORIGIN)
+      .set('Cookie', modCookies);
+
+    const v1 = await makeUser('flag-v1@example.com');
+    const v2 = await makeUser('flag-v2@example.com');
+    for (const cookie of [v1, v2]) {
+      const r = await request(app)
+        .post(`/api/settings/${uuid}/verify`)
+        .set('Origin', ORIGIN)
+        .set('Cookie', cookie)
+        .send({ outcome: 'failed' });
+      expect(r.status).toBe(200);
+    }
+
+    const flagged = await request(app).get('/api/mod/settings/flagged').set('Cookie', modCookies);
+    expect(flagged.status).toBe(200);
+    const found = flagged.body.data.find((s: { uuid: string }) => s.uuid === uuid);
+    expect(found).toBeTruthy();
+    expect(found.verified_failed_count).toBe(2);
+  });
 });

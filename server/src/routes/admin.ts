@@ -21,7 +21,8 @@ import { notFound, badRequest } from '../utils/errors.js';
 import { parseXcs, XcsParseError } from '../services/xcs.js';
 
 const router = Router();
-const xcsUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+// 15 MB cap accommodates .xs (ZIP, may include cover PNG) and .xcs (raw JSON).
+const xcsUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 router.use(requireRole('admin'));
 

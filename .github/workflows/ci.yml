@@ -183,3 +183,52 @@ jobs:
             cat /tmp/response.txt
             exit 1
           fi
+
+  smoke-test:
+    needs: [deploy-test]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      BASE_URL: https://test.ledger.lasertools.org
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait for the deployment to become healthy
+        run: |
+          echo "Polling ${BASE_URL}/health until the recreated container is live"
+          for i in $(seq 1 60); do
+            CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" "${BASE_URL}/health" || true)
+            if [ "$CODE" = "200" ] && grep -q '"status":"ok"' /tmp/health.json; then
+              echo "Healthy after ${i} attempt(s)."
+              exit 0
+            fi
+            echo "Attempt ${i}: HTTP ${CODE} — retrying in 5s"
+            sleep 5
+          done
+          echo "::error::Deployment did not become healthy within timeout"
+          exit 1
+
+      - name: Run post-deployment smoke tests
+        run: npm run test:post-deploy
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-deploy-playwright-report
+          path: playwright-report/
+          retention-days: 7
+

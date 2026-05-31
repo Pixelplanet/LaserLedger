@@ -5,7 +5,7 @@ import { ErrorBlock } from '../../components/States';
 import { UploadProgress } from '../../components/UploadProgress';
 import { uploadFileWithProgress, type UploadProgressState } from '../../lib/upload-progress';
 
-interface Device { id: number; name: string; slug: string; family_id: number | null; ext_id: string | null }
+interface Device { id: number; name: string; slug: string; family_id: number | null; ext_id: string | null; image_url: string | null; product_url: string | null }
 interface Family { id: number; name: string; slug: string; manufacturer_id: number | null }
 interface Manufacturer { id: number; name: string; slug: string; website: string | null }
 interface LaserTypeMatch { id: number; name: string; slug: string }
@@ -45,12 +45,12 @@ export default function AdminDevicesPage() {
   return (
     <PageBlock title="Devices, families & manufacturers" subtitle="Reference data for hardware.">
       <div className="form" style={{ marginBottom: '1.5rem' }}>
-        <h2>Import device metadata from XCS</h2>
+        <h2>Import device metadata from xTool file</h2>
         <label>
-          Upload .xcs file
+          Upload .xs or .xcs file
           <input
             type="file"
-            accept=".xcs,application/json"
+            accept=".xs,.xcs,application/json,application/zip"
             disabled={importBusy}
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -59,7 +59,7 @@ export default function AdminDevicesPage() {
           />
         </label>
         <UploadProgress state={importProgress} />
-        <p className="hint">This extracts the XCS extId and suggested device name, then prefills the device form below. You still choose the family ID manually.</p>
+        <p className="hint">This extracts the extId and suggested device name from an xTool Studio (.xs) or Creative Space (.xcs) file, then prefills the device form below. You still choose the family ID manually.</p>
         {importErr && <ErrorBlock>{importErr}</ErrorBlock>}
         {importData && (
           <div className="card">
@@ -122,6 +122,8 @@ export default function AdminDevicesPage() {
           { key: 'ext_id', label: 'XCS extId' },
           { key: 'ext_name', label: 'XCS extName' },
           { key: 'description', label: 'Description', type: 'textarea' },
+          { key: 'image_url', label: 'Image URL' },
+          { key: 'product_url', label: 'Product URL' },
         ]}
         displayColumns={[
           { key: 'id', label: 'ID' },

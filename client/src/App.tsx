@@ -9,6 +9,11 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import SubmitPage from './pages/SubmitPage';
+import QuickSubmitPage from './pages/QuickSubmitPage';
+import GalleryPage from './pages/GalleryPage';
+import DevicePage from './pages/DevicePage';
+import CollectionPage from './pages/CollectionPage';
+import DevicesIndexPage from './pages/DevicesIndexPage';
 import EditPage from './pages/EditPage';
 import ProfilePage from './pages/ProfilePage';
 import AccountPage from './pages/AccountPage';
@@ -34,6 +39,9 @@ function Nav() {
   const items = [
     ['/', 'Home'],
     ['/search', 'Search'],
+    ['/gallery', 'Gallery'],
+    ['/devices', 'Devices'],
+    ['/submit/quick', 'Quick recipe'],
     ['/submit', 'Submit'],
   ] as const;
 
@@ -122,13 +130,18 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/search" element={<SearchPage />} />
+          <Route path="/gallery" element={<GalleryPage />} />
+          <Route path="/devices" element={<DevicesIndexPage />} />
+          <Route path="/devices/:slug" element={<DevicePage />} />
           <Route path="/settings/:uuid" element={<SettingDetailPage />} />
+          <Route path="/collections/:uuid" element={<CollectionPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
           <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
           <Route path="/submit" element={<RequireAuth><SubmitPage /></RequireAuth>} />
+          <Route path="/submit/quick" element={<RequireAuth><QuickSubmitPage /></RequireAuth>} />
           <Route path="/settings/:uuid/edit" element={<RequireAuth><EditPage /></RequireAuth>} />
           <Route path="/profile/:id" element={<ProfilePage />} />
           <Route path="/account" element={<RequireAuth><AccountPage /></RequireAuth>} />

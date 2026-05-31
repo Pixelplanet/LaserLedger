@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Knex } from 'knex';
 import { db } from '../db/index.js';
 import { validate } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -7,6 +8,7 @@ import {
   SearchQuery,
   CommentInput,
   ReportInput,
+  VerifyInput,
   type ReportInput as ReportInputType,
 } from '@shared/schemas.js';
 import { uuid as makeUuid, nowIso, slugify } from '../utils/ids.js';
@@ -14,14 +16,16 @@ import { buildSearchQuery } from '../services/search.js';
 import { shouldAutoApprove } from '../services/moderation.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import { parseXcs, XcsParseError } from '../services/xcs.js';
+import { exportSetting, type ExportFormat } from '../services/xs-export.js';
 import { submissionLimiter, voteLimiter, commentLimiter } from '../middleware/rate-limit.js';
 import multer from 'multer';
 
 const router = Router();
 
+// 15 MB cap accommodates .xs (ZIP, may include cover PNG) and .xcs (raw JSON).
 const xcsUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 15 * 1024 * 1024 },
 });
 
 const FACET_CACHE_MS = 5 * 60 * 1000;
@@ -208,7 +212,17 @@ router.get('/settings/:uuid', async (req, res, next) => {
     const images = await db('setting_images')
       .where({ setting_id: row.id, status: 'approved' })
       .orderBy('sort_order');
-    res.json({ data: { ...row, tags, images } });
+    const myVerification = req.user
+      ? await db('setting_verifications')
+          .where({ setting_id: row.id, user_id: req.user.id })
+          .first<{ outcome: string; note: string | null } | undefined>()
+      : undefined;
+    const verification = {
+      worked: row.verified_worked_count ?? 0,
+      failed: row.verified_failed_count ?? 0,
+      mine: myVerification ? { outcome: myVerification.outcome, note: myVerification.note } : null,
+    };
+    res.json({ data: { ...row, tags, images, verification } });
   } catch (e) {
     next(e);
   }
@@ -223,6 +237,42 @@ router.get('/settings/:uuid/images', async (req, res, next) => {
       .where({ setting_id: setting.id, status: 'approved' })
       .orderBy('sort_order');
     res.json({ data: images });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ─── Export setting as .xcs or .xs ─────────────────────────────────────────
+router.get('/settings/:uuid/export', async (req, res, next) => {
+  try {
+    const format = req.query.format;
+    if (format !== 'xcs' && format !== 'xs') {
+      throw badRequest('format must be "xcs" or "xs"');
+    }
+    const setting = await db('laser_settings').where({ uuid: req.params.uuid }).first();
+    if (!setting || setting.status !== 'approved') throw notFound('Setting not found');
+    const result = exportSetting(
+      {
+        title: setting.title,
+        power: setting.power,
+        speed: setting.speed,
+        frequency: setting.frequency,
+        lpi: setting.lpi,
+        pulse_width: setting.pulse_width,
+        passes: setting.passes,
+        cross_hatch:
+          setting.cross_hatch === null || setting.cross_hatch === undefined
+            ? null
+            : Boolean(setting.cross_hatch),
+        scan_mode: setting.scan_mode,
+        source_xcs: setting.source_xcs,
+        source_format: setting.source_format,
+      },
+      format as ExportFormat,
+    );
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.send(result.buffer);
   } catch (e) {
     next(e);
   }
@@ -258,6 +308,7 @@ router.post('/settings', requireAuth, submissionLimiter, validate(SettingInput),
         extra_params: input.extra_params ? JSON.stringify(input.extra_params) : null,
         result_description: input.result_description ?? null,
         source_xcs: input.source_xcs ?? null,
+        source_format: input.source_format ?? null,
         quality_rating: input.quality_rating ?? null,
         submitted_by: user.id,
         status,
@@ -363,6 +414,72 @@ router.delete('/settings/:uuid/vote', requireAuth, async (req, res, next) => {
       });
     }
     res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ─── Verification (community "I tried this") ────────────────────────────────
+async function recountVerifications(
+  trx: typeof db | Knex.Transaction,
+  settingId: number,
+): Promise<{ worked: number; failed: number }> {
+  const worked = await trx('setting_verifications')
+    .where({ setting_id: settingId, outcome: 'worked' })
+    .count<{ c: number }[]>({ c: '*' });
+  const failed = await trx('setting_verifications')
+    .where({ setting_id: settingId, outcome: 'failed' })
+    .count<{ c: number }[]>({ c: '*' });
+  const workedCount = Number(worked[0]?.c ?? 0);
+  const failedCount = Number(failed[0]?.c ?? 0);
+  await trx('laser_settings')
+    .where({ id: settingId })
+    .update({ verified_worked_count: workedCount, verified_failed_count: failedCount });
+  return { worked: workedCount, failed: failedCount };
+}
+
+router.post('/settings/:uuid/verify', requireAuth, validate(VerifyInput), async (req, res, next) => {
+  try {
+    const user = req.user!;
+    const input = req.body as VerifyInput;
+    const setting = await db('laser_settings').where({ uuid: req.params.uuid, status: 'approved' }).first();
+    if (!setting) throw notFound('Setting not found');
+    if (setting.submitted_by === user.id) throw badRequest('You cannot verify your own setting');
+    const counts = await db.transaction(async (trx) => {
+      const existing = await trx('setting_verifications')
+        .where({ setting_id: setting.id, user_id: user.id })
+        .first();
+      if (existing) {
+        await trx('setting_verifications')
+          .where({ id: existing.id })
+          .update({ outcome: input.outcome, note: input.note ?? null });
+      } else {
+        await trx('setting_verifications').insert({
+          setting_id: setting.id,
+          user_id: user.id,
+          outcome: input.outcome,
+          note: input.note ?? null,
+          created_at: nowIso(),
+        });
+      }
+      return recountVerifications(trx, setting.id);
+    });
+    res.json({ data: { worked: counts.worked, failed: counts.failed, mine: { outcome: input.outcome, note: input.note ?? null } } });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.delete('/settings/:uuid/verify', requireAuth, async (req, res, next) => {
+  try {
+    const user = req.user!;
+    const setting = await db('laser_settings').where({ uuid: req.params.uuid }).first();
+    if (!setting) throw notFound('Setting not found');
+    const counts = await db.transaction(async (trx) => {
+      await trx('setting_verifications').where({ setting_id: setting.id, user_id: user.id }).delete();
+      return recountVerifications(trx, setting.id);
+    });
+    res.json({ data: { worked: counts.worked, failed: counts.failed, mine: null } });
   } catch (e) {
     next(e);
   }

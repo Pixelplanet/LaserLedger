@@ -10,7 +10,7 @@ LaserLedger lets makers publish and discover what laser settings actually work. 
 
 **Key features:**
 - Browse & search community-submitted laser settings with multi-dimensional filters
-- Submit settings with XCS file import for automatic parameter extraction
+- Submit settings with xTool file import (.xs / .xcs) for automatic parameter extraction
 - Upload result photos with thumbnail generation
 - Full admin CMS for managing devices, materials, laser types, and operations
 - Moderator approval workflow for submissions and images

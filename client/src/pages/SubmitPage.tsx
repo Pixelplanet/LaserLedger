@@ -134,10 +134,10 @@ export default function SubmitPage() {
     <PageBlock title="Submit a setting" subtitle="Share a known-good recipe with the community.">
       <div className="form" style={{ marginBottom: '1rem', padding: '0.75rem', border: '1px dashed var(--border)', borderRadius: 8 }}>
         <label>
-          Import from xTool Creative Space (.xcs)
+          Import from xTool Studio (.xs) or Creative Space (.xcs)
           <input
             type="file"
-            accept=".xcs,application/json,application/zip"
+            accept=".xs,.xcs,application/json,application/zip"
             disabled={parsing}
             onChange={(e) => {
               const f = e.target.files?.[0];

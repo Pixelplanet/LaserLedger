@@ -14,6 +14,24 @@ interface PendingSetting {
   material_name: string | null;
   created_at: string;
 }
+interface FlaggedSetting {
+  uuid: string;
+  title: string;
+  verified_worked_count: number;
+  verified_failed_count: number;
+  author_name: string | null;
+  device_name: string | null;
+  material_name: string | null;
+  created_at: string;
+}
+
+interface ModCollection {
+  uuid: string;
+  name: string;
+  description: string | null;
+  author_name: string | null;
+  created_at: string;
+}
 
 export default function ModPage() {
   const qc = useQueryClient();
@@ -21,6 +39,14 @@ export default function ModPage() {
   const pending = useQuery({
     queryKey: ['mod-pending'],
     queryFn: () => api<PendingSetting[]>('/mod/settings/pending'),
+  });
+  const flagged = useQuery({
+    queryKey: ['mod-flagged'],
+    queryFn: () => api<FlaggedSetting[]>('/mod/settings/flagged'),
+  });
+  const collections = useQuery({
+    queryKey: ['mod-collections'],
+    queryFn: () => api<ModCollection[]>('/mod/collections'),
   });
 
   const [reasonFor, setReasonFor] = useState<string | null>(null);
@@ -50,6 +76,11 @@ export default function ModPage() {
   const archive = useMutation({
     mutationFn: (uuid: string) => api(`/mod/settings/${uuid}/archive`, { method: 'POST' }),
     onSuccess: refresh,
+  });
+  const unpublishCollection = useMutation({
+    mutationFn: (uuid: string) => api(`/mod/collections/${uuid}/unpublish`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['mod-collections'] }),
+    onError: (e) => setErr(e instanceof ApiError ? e.message : 'Action failed'),
   });
 
   function submitReject(e: FormEvent) {
@@ -108,6 +139,60 @@ export default function ModPage() {
           </div>
         ))}
       </div>
+
+      {flagged.data && flagged.data.length > 0 && (
+        <div className="section-head" style={{ marginTop: '2rem' }}>
+          <h2>Flagged by the community <span className="tag warn">{flagged.data.length}</span></h2>
+        </div>
+      )}
+      {flagged.data && flagged.data.length > 0 && (
+        <div className="results-grid">
+          {flagged.data.map((s) => (
+            <div key={s.uuid} className="card">
+              <Link to={`/settings/${s.uuid}`}><h3>{s.title}</h3></Link>
+              <div className="meta">
+                <span className="tag warn">✗ {s.verified_failed_count} failed</span>
+                <span className="tag muted">✓ {s.verified_worked_count} worked</span>
+              </div>
+              <div className="meta">
+                by {s.author_name ?? 'unknown'}
+                {s.device_name && <span className="tag muted">{s.device_name}</span>}
+                {s.material_name && <span className="tag muted">{s.material_name}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {collections.data && collections.data.length > 0 && (
+        <div className="section-head" style={{ marginTop: '2rem' }}>
+          <h2>Public collections <span className="tag muted">{collections.data.length}</span></h2>
+        </div>
+      )}
+      {collections.data && collections.data.length > 0 && (
+        <div className="results-grid">
+          {collections.data.map((c) => (
+            <div key={c.uuid} className="card">
+              <Link to={`/collections/${c.uuid}`}><h3>{c.name}</h3></Link>
+              <div className="meta">
+                by {c.author_name ?? 'unknown'} · {new Date(c.created_at).toLocaleDateString()}
+              </div>
+              {c.description && (
+                <p className="hint" style={{ margin: 0 }}>
+                  {c.description.slice(0, 140)}{c.description.length > 140 ? '…' : ''}
+                </p>
+              )}
+              <div className="toolbar" style={{ margin: 0 }}>
+                <button
+                  className="btn sm danger"
+                  disabled={unpublishCollection.isPending}
+                  onClick={() => unpublishCollection.mutate(c.uuid)}
+                >Unpublish</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </PageBlock>
   );
 }

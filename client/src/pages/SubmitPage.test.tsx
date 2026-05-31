@@ -102,7 +102,7 @@ describe('SubmitPage', () => {
     );
 
     const file = new File(['{}'], 'setting.xcs', { type: 'application/json' });
-    await userEvent.upload(screen.getByLabelText('Import from xTool Creative Space (.xcs)'), file);
+    await userEvent.upload(screen.getByLabelText('Import from xTool Studio (.xs) or Creative Space (.xcs)'), file);
 
     await waitFor(() => {
       expect(screen.getByLabelText('Power (%)')).toHaveValue(42);

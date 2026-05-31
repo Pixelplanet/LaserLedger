@@ -6,6 +6,7 @@ import { Button } from '../components/Button';
 import { ErrorBlock } from '../components/States';
 import { api, ApiError } from '../lib/api';
 import { useAuthStore } from '../lib/auth-store';
+import CollectionsManager from '../components/CollectionsManager';
 
 export default function AccountPage() {
   const nav = useNavigate();
@@ -64,6 +65,13 @@ export default function AccountPage() {
 
   return (
     <PageBlock title="Account settings" subtitle={`Signed in as ${user.email}`}>
+      {user.badges && user.badges.length > 0 && (
+        <div className="tag-cloud" style={{ marginBottom: '1rem' }}>
+          {user.badges.map((b) => (
+            <span key={b.slug} className="tag solid" title={b.description}>{b.label}</span>
+          ))}
+        </div>
+      )}
       <form className="form" onSubmit={onSubmit}>
         <label>
           Display name
@@ -87,6 +95,8 @@ export default function AccountPage() {
           {update.isPending ? 'Saving…' : 'Save profile'}
         </Button>
       </form>
+
+      <CollectionsManager />
 
       <h2 style={{ marginTop: '1.5rem' }}>Privacy & data</h2>
       <div className="toolbar">

@@ -13,6 +13,7 @@ import authRouter from './routes/auth.js';
 import publicRouter from './routes/public.js';
 import settingsRouter from './routes/settings.js';
 import imagesRouter from './routes/images.js';
+import collectionsRouter from './routes/collections.js';
 import modRouter from './routes/mod.js';
 import adminRouter from './routes/admin.js';
 import { db } from './db/index.js';
@@ -82,6 +83,7 @@ export function createApp(): Express {
   app.use('/api', publicRouter);
   app.use('/api', settingsRouter);
   app.use('/api', imagesRouter);
+  app.use('/api', collectionsRouter);
   app.use('/api/mod', modRouter);
   app.use('/api/admin', adminRouter);
 

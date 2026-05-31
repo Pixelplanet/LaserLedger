@@ -8,7 +8,10 @@
     "moduleResolution": "Bundler",
     "types": ["vite/client", "vitest/globals"],
     "noEmit": true,
-    "baseUrl": "."
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../shared/*"]
+    }
   },
   "include": ["src", "vite.config.ts"]
 }

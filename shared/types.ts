@@ -53,6 +53,7 @@ export interface LaserSetting {
   result_description: string | null;
   result_image_url: string | null;
   source_xcs: string | null;
+  source_format: 'xcs' | 'xs' | null;
   quality_rating: number | null;
   submitted_by: string;
   status: SettingStatus;

@@ -30,6 +30,13 @@ interface SettingDetail {
   vote_score: number;
   view_count: number;
   created_at: string;
+  verified_worked_count: number;
+  verified_failed_count: number;
+  verification: {
+    worked: number;
+    failed: number;
+    mine: { outcome: string; note: string | null } | null;
+  };
   tags: { id: number; name: string; slug: string }[];
   images: ImageRow[];
 }
@@ -49,6 +56,13 @@ interface CommentRow {
   created_at: string;
   user_id: string;
   display_name: string;
+}
+
+interface CollectionSummary {
+  uuid: string;
+  name: string;
+  is_public: boolean;
+  item_count?: number;
 }
 
 const url = (p?: string | null) => (p ? `/api/uploads/${p}` : '');
@@ -102,6 +116,8 @@ export default function SettingDetailPage() {
   const [activeImg, setActiveImg] = useState(0);
   const [zoom, setZoom] = useState(false);
   const [body, setBody] = useState('');
+  const [selectedColl, setSelectedColl] = useState('');
+  const [collMsg, setCollMsg] = useState<string | null>(null);
 
   const detail = useQuery({
     queryKey: ['setting', uuid],
@@ -131,6 +147,31 @@ export default function SettingDetailPage() {
       setBody('');
       qc.invalidateQueries({ queryKey: ['comments', uuid] });
     },
+  });
+  const verify = useMutation({
+    mutationFn: (outcome: 'worked' | 'partial' | 'failed') =>
+      api(`/settings/${uuid}/verify`, { method: 'POST', body: { outcome } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['setting', uuid] }),
+  });
+  const unverify = useMutation({
+    mutationFn: () => api(`/settings/${uuid}/verify`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['setting', uuid] }),
+  });
+
+  const myCollections = useQuery({
+    queryKey: ['my-collections'],
+    queryFn: () => api<CollectionSummary[]>('/collections'),
+    enabled: !!user,
+    staleTime: 30_000,
+  });
+  const addToCollection = useMutation({
+    mutationFn: (collUuid: string) =>
+      api(`/collections/${collUuid}/items`, { method: 'POST', body: { setting_uuid: uuid } }),
+    onSuccess: () => {
+      setCollMsg('Saved to collection.');
+      qc.invalidateQueries({ queryKey: ['my-collections'] });
+    },
+    onError: (e) => setCollMsg(e instanceof ApiError ? e.message : 'Could not save.'),
   });
 
   // Lightbox controls
@@ -334,6 +375,95 @@ export default function SettingDetailPage() {
                 {s.tags.map((t) => <span key={t.id} className="tag">{t.name}</span>)}
               </div>
             )}
+          </div>
+
+          <div className="side-card">
+            <h3 className="side-head">Did this work for you?</h3>
+            <div className="verify-stats">
+              <span className="tag solid">✓ {s.verification.worked} worked</span>
+              <span className="tag warn">✗ {s.verification.failed} failed</span>
+            </div>
+            {user ? (
+              user.id === s.author_id ? (
+                <p className="hint">You can't verify your own setting.</p>
+              ) : (
+                <div className="verify-actions">
+                  <button
+                    type="button"
+                    className={`btn sm ${s.verification.mine?.outcome === 'worked' ? 'primary' : ''}`}
+                    disabled={verify.isPending}
+                    onClick={() => verify.mutate('worked')}
+                  >It worked</button>
+                  <button
+                    type="button"
+                    className={`btn sm ${s.verification.mine?.outcome === 'partial' ? 'primary' : ''}`}
+                    disabled={verify.isPending}
+                    onClick={() => verify.mutate('partial')}
+                  >Partial</button>
+                  <button
+                    type="button"
+                    className={`btn sm ${s.verification.mine?.outcome === 'failed' ? 'primary' : ''}`}
+                    disabled={verify.isPending}
+                    onClick={() => verify.mutate('failed')}
+                  >Didn't work</button>
+                  {s.verification.mine && (
+                    <button
+                      type="button"
+                      className="btn sm"
+                      disabled={unverify.isPending}
+                      onClick={() => unverify.mutate()}
+                    >Clear</button>
+                  )}
+                </div>
+              )
+            ) : (
+              <p className="hint"><Link to="/login">Sign in</Link> to report your result.</p>
+            )}
+          </div>
+
+          {user && (
+            <div className="side-card">
+              <h3 className="side-head">Save to collection</h3>
+              {myCollections.data && myCollections.data.length > 0 ? (
+                <div className="collection-add">
+                  <select
+                    value={selectedColl}
+                    onChange={(e) => {
+                      setSelectedColl(e.target.value);
+                      setCollMsg(null);
+                    }}
+                    aria-label="Choose a collection"
+                  >
+                    <option value="">Choose a collection…</option>
+                    {myCollections.data.map((c) => (
+                      <option key={c.uuid} value={c.uuid}>{c.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn sm primary"
+                    disabled={!selectedColl || addToCollection.isPending}
+                    onClick={() => selectedColl && addToCollection.mutate(selectedColl)}
+                  >Add</button>
+                </div>
+              ) : (
+                <p className="hint">No collections yet. <Link to="/account">Create one</Link>.</p>
+              )}
+              {collMsg && <p className="hint">{collMsg}</p>}
+            </div>
+          )}
+
+          <div className="side-card">
+            <h3 className="side-head">Download settings file</h3>
+            <p className="hint">Import these parameters directly into xTool software.</p>
+            <div className="download-actions">
+              <a className="btn sm primary" href={`/api/settings/${uuid}/export?format=xcs`} download>
+                Download .xcs
+              </a>
+              <a className="btn sm" href={`/api/settings/${uuid}/export?format=xs`} download>
+                Download .xs
+              </a>
+            </div>
           </div>
 
           {paramRows.length > 0 && (

@@ -3,6 +3,12 @@ import { api } from './api';
 
 export type Role = 'user' | 'moderator' | 'admin';
 
+export interface Badge {
+  slug: string;
+  label: string;
+  description: string;
+}
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -13,6 +19,7 @@ export interface AuthUser {
   avatar_url?: string | null;
   submission_count?: number;
   reputation?: number;
+  badges?: Badge[];
 }
 
 interface AuthState {

@@ -22,6 +22,7 @@ import {
 } from '../services/email.js';
 import { env, isProd, isTest } from '../config.js';
 import { AppError, badRequest, conflict, notFound, unauthorized } from '../utils/errors.js';
+import { deriveBadges, type Badge } from '../services/badges.js';
 import rateLimit from 'express-rate-limit';
 import { OAuth2Client } from 'google-auth-library';
 import type { User } from '@shared/types.js';
@@ -58,6 +59,25 @@ function publicUser(u: User) {
     reputation: u.reputation,
     created_at: u.created_at,
   };
+}
+
+export async function loadBadges(
+  userId: string,
+  submissionCount: number,
+  reputation: number,
+): Promise<Badge[]> {
+  const verRows = await db('setting_verifications')
+    .where({ user_id: userId })
+    .count<{ c: number }[]>({ c: '*' });
+  const topRows = await db('laser_settings')
+    .where({ submitted_by: userId, status: 'approved' })
+    .max<{ m: number | null }[]>({ m: 'vote_score' });
+  return deriveBadges({
+    submission_count: submissionCount,
+    reputation,
+    verification_count: Number(verRows[0]?.c ?? 0),
+    top_vote_score: Number(topRows[0]?.m ?? 0),
+  });
 }
 
 // ─── Register ──────────────────────────────────────────────────────────────
@@ -186,12 +206,17 @@ router.post('/logout', (_req, res) => {
 });
 
 // ─── Me ────────────────────────────────────────────────────────────────────
-router.get('/me', (req: Request, res) => {
-  if (!req.user) {
-    res.json({ data: null });
-    return;
+router.get('/me', async (req: Request, res, next) => {
+  try {
+    if (!req.user) {
+      res.json({ data: null });
+      return;
+    }
+    const badges = await loadBadges(req.user.id, req.user.submission_count, req.user.reputation);
+    res.json({ data: { ...publicUser(req.user), badges } });
+  } catch (e) {
+    next(e);
   }
-  res.json({ data: publicUser(req.user) });
 });
 
 // ─── Verify email ──────────────────────────────────────────────────────────
