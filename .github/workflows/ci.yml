@@ -184,6 +184,69 @@ jobs:
             exit 1
           fi
 
+      - name: Verify container state and endpoint health
+        env:
+          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+          PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
+          BASE_URL: https://test.ledger.lasertools.org
+        run: |
+          CONTAINER_NAME="laserledger-test"
+          PORTAINER_URL="${PORTAINER_URL%/}"
+          ENDPOINT_ID="$PORTAINER_ENDPOINT_ID"
+
+          CONTAINERS=$(curl -sf \
+            -H "X-API-Key: ${PORTAINER_API_KEY}" \
+            "${PORTAINER_URL}/api/endpoints/${ENDPOINT_ID}/docker/containers/json?all=true")
+          CONTAINER_ID=$(echo "$CONTAINERS" | jq -r --arg n "/${CONTAINER_NAME}" '.[] | select(.Names | index($n)) | .Id' | head -n1)
+
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "::error::Container '${CONTAINER_NAME}' not found after recreate"
+            exit 1
+          fi
+
+          echo "Polling container runtime state and ${BASE_URL}/health"
+          for i in $(seq 1 90); do
+            INSPECT=$(curl -sf \
+              -H "X-API-Key: ${PORTAINER_API_KEY}" \
+              "${PORTAINER_URL}/api/endpoints/${ENDPOINT_ID}/docker/containers/${CONTAINER_ID}/json")
+
+            STATUS=$(echo "$INSPECT" | jq -r '.State.Status // "unknown"')
+            RUNNING=$(echo "$INSPECT" | jq -r '.State.Running // false')
+            EXIT_CODE=$(echo "$INSPECT" | jq -r '.State.ExitCode // -1')
+
+            HTTP_CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" "${BASE_URL}/health" || true)
+            if [ "$HTTP_CODE" = "200" ] && grep -q '"status":"ok"' /tmp/health.json; then
+              echo "Container=${STATUS} running=${RUNNING}. Endpoint healthy after ${i} attempt(s)."
+              exit 0
+            fi
+
+            echo "Attempt ${i}: container=${STATUS} running=${RUNNING} exit=${EXIT_CODE}, health=${HTTP_CODE}"
+            sleep 5
+          done
+
+          echo "::error::Deployment did not become healthy. Last container inspect summary:"
+          curl -sf \
+            -H "X-API-Key: ${PORTAINER_API_KEY}" \
+            "${PORTAINER_URL}/api/endpoints/${ENDPOINT_ID}/docker/containers/${CONTAINER_ID}/json" \
+            | jq '{
+                Name,
+                Image,
+                State,
+                RestartCount,
+                Created,
+                Config: { Env: .Config.Env }
+              }'
+
+          echo "::group::Container logs (tail 200)"
+          curl -sf \
+            -H "X-API-Key: ${PORTAINER_API_KEY}" \
+            "${PORTAINER_URL}/api/endpoints/${ENDPOINT_ID}/docker/containers/${CONTAINER_ID}/logs?stdout=1&stderr=1&tail=200" \
+            || true
+          echo "::endgroup::"
+
+          exit 1
+
   smoke-test:
     needs: [deploy-test]
     if: github.ref == 'refs/heads/main'
