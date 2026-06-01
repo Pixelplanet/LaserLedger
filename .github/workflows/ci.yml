@@ -215,7 +215,7 @@ jobs:
             RUNNING=$(echo "$INSPECT" | jq -r '.State.Running // false')
             EXIT_CODE=$(echo "$INSPECT" | jq -r '.State.ExitCode // -1')
 
-            HTTP_CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" "${BASE_URL}/health" || true)
+            HTTP_CODE=$(curl -sS --connect-timeout 5 --max-time 10 -o /tmp/health.json -w "%{http_code}" "${BASE_URL}/health" || true)
             if [ "$HTTP_CODE" = "200" ] && grep -q '"status":"ok"' /tmp/health.json; then
               echo "Container=${STATUS} running=${RUNNING}. Endpoint healthy after ${i} attempt(s)."
               exit 0
@@ -273,7 +273,7 @@ jobs:
         run: |
           echo "Polling ${BASE_URL}/health until the recreated container is live"
           for i in $(seq 1 60); do
-            CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" "${BASE_URL}/health" || true)
+            CODE=$(curl -sS --connect-timeout 5 --max-time 10 -o /tmp/health.json -w "%{http_code}" "${BASE_URL}/health" || true)
             if [ "$CODE" = "200" ] && grep -q '"status":"ok"' /tmp/health.json; then
               echo "Healthy after ${i} attempt(s)."
               exit 0
