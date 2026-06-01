@@ -96,7 +96,7 @@ test.describe('post-deploy SPA', () => {
   test('gallery route loads client-side', async ({ page }) => {
     const res = await page.goto('/gallery');
     expect(res?.status()).toBeLessThan(400);
-    // SPA fallback serves index.html for unknown deep links; the app shell mounts.
-    await expect(page.getByRole('heading', { name: 'LaserLedger' })).toBeVisible();
+    await page.waitForURL(/\/gallery$/);
+    await expect(page.getByRole('heading', { name: 'Gallery' })).toBeVisible();
   });
 });
