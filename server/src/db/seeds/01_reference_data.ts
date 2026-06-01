@@ -1,5 +1,6 @@
 import type { Knex } from 'knex';
 import bcrypt from 'bcryptjs';
+import { ensureMaterialCatalog } from '../material-catalog.js';
 
 /**
  * Seed reference data — design doc §5.3.
@@ -230,56 +231,8 @@ export async function seed(knex: Knex): Promise<void> {
     dlt(f2, ltBlueF2, false, [20]),
   ]);
 
-  // ───── material categories ─────
-  const categories = await insertMany(
-    knex,
-    'material_categories',
-    [
-      'Metals',
-      'Wood',
-      'Acrylic/Plastic',
-      'Leather',
-      'Glass',
-      'Stone',
-      'Paper/Cardboard',
-      'Fabric',
-    ].map((name, i) => ({
-      name,
-      slug: slugify(name),
-      sort_order: i,
-      created_at: now,
-      updated_at: now,
-    })),
-  );
-  const metalsId = categories[0]!;
-
-  // ───── materials ─────
-  await knex('materials').insert([
-    {
-      category_id: metalsId,
-      name: '304 Stainless Steel',
-      slug: '304-stainless-steel',
-      xtool_material_id: 1323,
-      color: 'Silver',
-      description: 'Standard 304 stainless steel sheet.',
-      is_active: true,
-      sort_order: 0,
-      created_at: now,
-      updated_at: now,
-    },
-    {
-      category_id: metalsId,
-      name: 'Titanium',
-      slug: 'titanium',
-      xtool_material_id: 458,
-      color: 'Silver',
-      description: 'Grade 2 titanium sheet.',
-      is_active: true,
-      sort_order: 1,
-      created_at: now,
-      updated_at: now,
-    },
-  ]);
+  // ───── material categories + materials ─────
+  await ensureMaterialCatalog(knex);
 
   // ───── operation types ─────
   await insertMany(

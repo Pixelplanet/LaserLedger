@@ -12,7 +12,13 @@ interface DeviceRow {
   laser_types?: { id: number; name: string }[];
 }
 interface LaserRow { id: number; name: string }
-interface MaterialRow { id: number; name: string; thickness_mm?: number | null }
+interface MaterialRow {
+  id: number;
+  name: string;
+  slug?: string;
+  thickness_mm?: number | null;
+  category_name?: string | null;
+}
 interface OpRow { id: number; name: string }
 interface CreateResp { uuid: string }
 
@@ -21,13 +27,12 @@ export default function QuickSubmitPage() {
   const refs = useQuery({
     queryKey: ['quick-submit-refs'],
     queryFn: async () => {
-      const [devices, lasers, materials, ops] = await Promise.all([
+      const [devices, materials, ops] = await Promise.all([
         api<DeviceRow[]>('/devices'),
-        api<LaserRow[]>('/laser-types'),
         api<MaterialRow[]>('/materials'),
         api<OpRow[]>('/operation-types'),
       ]);
-      return { devices, lasers, materials, ops };
+      return { devices, materials, ops };
     },
   });
 
@@ -35,10 +40,14 @@ export default function QuickSubmitPage() {
     device_id: '',
     laser_type_id: '',
     material_id: '',
+    custom_material: '',
     operation_type_id: '',
     power: '',
     speed: '',
     passes: '1',
+    frequency: '',
+    focus_offset: '',
+    result_description: '',
   });
   const [titleOverride, setTitleOverride] = useState<string | null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
@@ -48,19 +57,43 @@ export default function QuickSubmitPage() {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
-  // Laser types available for the chosen device (fall back to all laser types).
-  const laserOptions = useMemo<LaserRow[]>(() => {
-    if (!refs.data) return [];
-    const dev = refs.data.devices.find((d) => String(d.id) === form.device_id);
-    if (dev?.laser_types && dev.laser_types.length > 0) return dev.laser_types;
-    return refs.data.lasers;
-  }, [refs.data, form.device_id]);
+  const devicesWithLasers = useMemo<DeviceRow[]>(
+    () => refs.data?.devices.filter((d) => (d.laser_types?.length ?? 0) > 0) ?? [],
+    [refs.data],
+  );
+
+  const selectedDevice = useMemo(
+    () => devicesWithLasers.find((d) => String(d.id) === form.device_id),
+    [devicesWithLasers, form.device_id],
+  );
+
+  const laserOptions = useMemo<LaserRow[]>(() => selectedDevice?.laser_types ?? [], [selectedDevice]);
+
+  const showLaserSelector = laserOptions.length > 1;
+
+  const customMaterialFallback = useMemo(
+    () => refs.data?.materials.find((m) => m.slug === 'custom-material') ?? null,
+    [refs.data],
+  );
+
+  const materialGroups = useMemo(() => {
+    const groups = new Map<string, MaterialRow[]>();
+    for (const m of refs.data?.materials ?? []) {
+      const key = m.category_name?.trim() || 'Other';
+      const arr = groups.get(key) ?? [];
+      arr.push(m);
+      groups.set(key, arr);
+    }
+    return [...groups.entries()];
+  }, [refs.data]);
 
   const autoTitle = useMemo(() => {
     if (!refs.data) return '';
     const device = refs.data.devices.find((d) => String(d.id) === form.device_id)?.name;
     const laser = laserOptions.find((l) => String(l.id) === form.laser_type_id)?.name;
-    const material = refs.data.materials.find((m) => String(m.id) === form.material_id);
+    const selectedMaterial = refs.data.materials.find((m) => String(m.id) === form.material_id);
+    const customMaterial = form.custom_material.trim();
+    const material = customMaterial.length > 0 ? { name: customMaterial, thickness_mm: null } : selectedMaterial;
     const operation = refs.data.ops.find((o) => String(o.id) === form.operation_type_id)?.name;
     return buildRecipeTitle({
       operation,
@@ -69,7 +102,15 @@ export default function QuickSubmitPage() {
       device,
       laser,
     });
-  }, [refs.data, form.device_id, form.laser_type_id, form.material_id, form.operation_type_id, laserOptions]);
+  }, [
+    refs.data,
+    form.device_id,
+    form.laser_type_id,
+    form.material_id,
+    form.custom_material,
+    form.operation_type_id,
+    laserOptions,
+  ]);
 
   const title = titleOverride ?? autoTitle;
 
@@ -84,10 +125,25 @@ export default function QuickSubmitPage() {
     return Number.isFinite(n) ? n : null;
   }
 
+  function onDeviceChange(nextDeviceId: string) {
+    const device = devicesWithLasers.find((d) => String(d.id) === nextDeviceId);
+    const options = device?.laser_types ?? [];
+    let laserTypeId = '';
+    if (options.length === 1) laserTypeId = String(options[0]!.id);
+    if (options.length > 1) laserTypeId = '';
+    setForm((f) => ({ ...f, device_id: nextDeviceId, laser_type_id: laserTypeId }));
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setErr(null);
-    if (!form.device_id || !form.laser_type_id || !form.material_id || !form.operation_type_id) {
+    const customMaterial = form.custom_material.trim();
+    const materialId = form.material_id
+      ? Number(form.material_id)
+      : customMaterial.length > 0
+        ? customMaterialFallback?.id ?? null
+        : null;
+    if (!form.device_id || !form.laser_type_id || !materialId || !form.operation_type_id) {
       setErr('Material, device, laser, and operation are required.');
       return;
     }
@@ -96,16 +152,25 @@ export default function QuickSubmitPage() {
       setErr('Could not build a title — please enter one.');
       return;
     }
+    const resultDescriptionLines: string[] = [];
+    if (customMaterial.length > 0) resultDescriptionLines.push(`Custom material: ${customMaterial}`);
+    const notes = form.result_description.trim();
+    if (notes) resultDescriptionLines.push(notes);
+    const resultDescription = resultDescriptionLines.join('\n\n');
+
     try {
       const created = await create.mutateAsync({
         title: finalTitle,
         device_id: Number(form.device_id),
         laser_type_id: Number(form.laser_type_id),
-        material_id: Number(form.material_id),
+        material_id: materialId,
         operation_type_id: Number(form.operation_type_id),
         power: num(form.power),
         speed: num(form.speed),
         passes: num(form.passes) ?? 1,
+        frequency: num(form.frequency),
+        focus_offset: num(form.focus_offset),
+        result_description: resultDescription || null,
       });
       // Optional result photo — best-effort, non-fatal if it fails.
       if (photo) {
@@ -129,38 +194,65 @@ export default function QuickSubmitPage() {
 
   return (
     <PageBlock
-      title="Quick recipe"
-      subtitle="Capture one known-good setting in seconds. Need every field? Use the full submit form."
+      title="Single setting"
+      subtitle="Capture one known-good single setting in seconds. Need every field? Use the full submit form."
     >
       <form className="form quick-recipe" onSubmit={onSubmit}>
         <label>
           Material
-          <select required value={form.material_id} onChange={(e) => set('material_id', e.target.value)}>
+          <select value={form.material_id} onChange={(e) => set('material_id', e.target.value)}>
             <option value="">Select…</option>
-            {refs.data?.materials.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-                {m.thickness_mm != null ? ` (${m.thickness_mm}mm)` : ''}
-              </option>
+            {materialGroups.map(([group, rows]) => (
+              <optgroup key={group} label={group}>
+                {rows.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                    {m.thickness_mm != null ? ` (${m.thickness_mm}mm)` : ''}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
+        </label>
+
+        <label>
+          Custom material (if missing in the list)
+          <input
+            value={form.custom_material}
+            onChange={(e) => set('custom_material', e.target.value)}
+            placeholder="e.g. Powder-coated brass"
+            maxLength={150}
+          />
+          <span className="hint">Leave empty when the dropdown already has your material.</span>
         </label>
 
         <div className="row">
           <label>
             Device
-            <select required value={form.device_id} onChange={(e) => { set('device_id', e.target.value); set('laser_type_id', ''); }}>
+            <select required value={form.device_id} onChange={(e) => onDeviceChange(e.target.value)}>
               <option value="">Select…</option>
-              {refs.data?.devices.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              {devicesWithLasers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </label>
-          <label>
-            Laser
-            <select required value={form.laser_type_id} onChange={(e) => set('laser_type_id', e.target.value)}>
-              <option value="">Select…</option>
-              {laserOptions.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
-          </label>
+          {showLaserSelector ? (
+            <label>
+              Laser source
+              <select required value={form.laser_type_id} onChange={(e) => set('laser_type_id', e.target.value)}>
+                <option value="">Select…</option>
+                {laserOptions.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </label>
+          ) : (
+            <label>
+              Laser source
+              <input
+                value={laserOptions[0]?.name ?? ''}
+                readOnly
+                placeholder="Select a device"
+              />
+              <span className="hint">Auto-selected from the device.</span>
+            </label>
+          )}
         </div>
 
         <label>
@@ -175,7 +267,21 @@ export default function QuickSubmitPage() {
           <label>Power (%)<input type="number" min={0} max={100} step="0.1" value={form.power} onChange={(e) => set('power', e.target.value)} /></label>
           <label>Speed (mm/s)<input type="number" min={0} step="1" value={form.speed} onChange={(e) => set('speed', e.target.value)} /></label>
         </div>
-        <label>Passes<input type="number" min={1} max={50} value={form.passes} onChange={(e) => set('passes', e.target.value)} /></label>
+        <div className="row">
+          <label>Passes<input type="number" min={1} max={50} value={form.passes} onChange={(e) => set('passes', e.target.value)} /></label>
+          <label>Frequency (kHz)<input type="number" min={0} value={form.frequency} onChange={(e) => set('frequency', e.target.value)} /></label>
+        </div>
+        <label>Defocus (mm)<input type="number" step="0.1" value={form.focus_offset} onChange={(e) => set('focus_offset', e.target.value)} /></label>
+
+        <label>
+          Notes for moderators/users (optional)
+          <textarea
+            maxLength={5000}
+            value={form.result_description}
+            onChange={(e) => set('result_description', e.target.value)}
+            placeholder="Any context that helps others reproduce this setting"
+          />
+        </label>
 
         <label>
           Title
@@ -208,7 +314,7 @@ export default function QuickSubmitPage() {
         {err && <p className="err">{err}</p>}
         <div className="toolbar">
           <Button type="submit" variant="primary" size="sm" disabled={create.isPending}>
-            {create.isPending ? 'Saving…' : 'Save recipe'}
+            {create.isPending ? 'Saving…' : 'Save setting'}
           </Button>
           <span className="hint">Enters the moderation queue. You can add more details and images on the next screen.</span>
         </div>

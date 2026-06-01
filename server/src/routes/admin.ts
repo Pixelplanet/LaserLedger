@@ -19,6 +19,7 @@ import {
 import { slugify, nowIso } from '../utils/ids.js';
 import { notFound, badRequest } from '../utils/errors.js';
 import { parseXcs, XcsParseError } from '../services/xcs.js';
+import { ensureMaterialCatalog } from '../db/material-catalog.js';
 
 const router = Router();
 // 15 MB cap accommodates .xs (ZIP, may include cover PNG) and .xcs (raw JSON).
@@ -267,6 +268,24 @@ router.patch('/system-settings/:key', async (req, res, next) => {
       .update({ value: String(value), updated_at: nowIso() });
     if (!updated) throw notFound('Setting not found');
     res.json({ data: await db('system_settings').where({ key: req.params.key }).first() });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/materials/sync-catalog', async (req, res, next) => {
+  try {
+    const result = await ensureMaterialCatalog(db);
+    await db('moderation_log').insert({
+      moderator_id: req.user!.id,
+      target_type: 'cms_entity',
+      target_id: 0,
+      action: 'edit',
+      reason: null,
+      notes: `material-catalog-sync categories+${result.categoriesInserted} materials+${result.materialsInserted}`,
+      created_at: nowIso(),
+    });
+    res.json({ data: result });
   } catch (e) {
     next(e);
   }

@@ -41,7 +41,7 @@ function Nav() {
     ['/search', 'Search'],
     ['/gallery', 'Gallery'],
     ['/devices', 'Devices'],
-    ['/submit/quick', 'Quick recipe'],
+    ['/submit/quick', 'Single setting'],
     ['/submit', 'Submit'],
   ] as const;
 

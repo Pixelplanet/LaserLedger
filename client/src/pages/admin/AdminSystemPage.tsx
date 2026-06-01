@@ -15,6 +15,7 @@ interface SystemSetting {
 export default function AdminSystemPage() {
   const qc = useQueryClient();
   const [err, setErr] = useState<string | null>(null);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const list = useQuery({ queryKey: ['admin-system'], queryFn: () => api<SystemSetting[]>('/admin/system-settings') });
 
   const update = useMutation({
@@ -24,9 +25,20 @@ export default function AdminSystemPage() {
     onError: (e) => setErr(e instanceof ApiError ? e.message : 'Update failed'),
   });
 
+  const syncMaterials = useMutation({
+    mutationFn: () => api<{ categoriesInserted: number; materialsInserted: number }>('/admin/materials/sync-catalog', { method: 'POST' }),
+    onSuccess: (result) => {
+      setSyncMsg(`Catalog sync complete: +${result.categoriesInserted} categories, +${result.materialsInserted} materials.`);
+      qc.invalidateQueries({ queryKey: ['quick-submit-refs'] });
+      qc.invalidateQueries({ queryKey: ['submit-refs'] });
+    },
+    onError: (e) => setErr(e instanceof ApiError ? e.message : 'Catalog sync failed'),
+  });
+
   function onSave(key: string, e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErr(null);
+    setSyncMsg(null);
     const fd = new FormData(e.currentTarget);
     update.mutate({ key, value: String(fd.get('value') ?? '') });
   }
@@ -34,6 +46,23 @@ export default function AdminSystemPage() {
   return (
     <PageBlock title="System settings" subtitle="Tunable runtime configuration.">
       {err && <ErrorBlock>{err}</ErrorBlock>}
+      {syncMsg && <p className="hint">{syncMsg}</p>}
+      <div className="toolbar" style={{ marginBottom: '1rem' }}>
+        <Button
+          type="button"
+          size="sm"
+          variant="primary"
+          disabled={syncMaterials.isPending}
+          onClick={() => {
+            setErr(null);
+            setSyncMsg(null);
+            syncMaterials.mutate();
+          }}
+        >
+          {syncMaterials.isPending ? 'Syncing catalog…' : 'Sync material catalog'}
+        </Button>
+        <span className="hint">Adds only missing categories/materials from the built-in catalog. Existing rows are left unchanged.</span>
+      </div>
       {list.isLoading && <LoadingBlock />}
       {list.data && (
         <div className="form wide">
