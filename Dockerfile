@@ -4,10 +4,10 @@ FROM node:22-bookworm AS build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN for i in 1 2 3; do npm ci && break || sleep $((i * 5)); done
 
 COPY client/package*.json ./client/
-RUN npm --prefix client install
+RUN for i in 1 2 3; do npm --prefix client install && break || sleep $((i * 5)); done
 
 COPY . .
 RUN npm run build
