@@ -73,12 +73,17 @@ export async function ensureMaterialCatalog(knex: Knex): Promise<MaterialCatalog
   let categoriesInserted = 0;
   let materialsInserted = 0;
 
-  const existingCategories = await knex('material_categories').select<{ id: number; slug: string }[]>('id', 'slug');
+  const existingCategories = await knex('material_categories').select<
+    { id: number; name: string; slug: string }[]
+  >('id', 'name', 'slug');
+  const existingCategoryNames = new Set(existingCategories.map((row) => row.name.toLowerCase()));
   for (const row of existingCategories) categoryIdBySlug.set(row.slug, row.id);
 
   for (const cat of MATERIAL_CATEGORY_SEEDS) {
     const existingId = categoryIdBySlug.get(cat.slug);
     if (existingId) continue;
+    // Also skip if name already exists (unique constraint on name, e.g. from a prior seed run)
+    if (existingCategoryNames.has(cat.name.toLowerCase())) continue;
     const inserted = await knex('material_categories').insert({
       name: cat.name,
       slug: cat.slug,
@@ -88,6 +93,7 @@ export async function ensureMaterialCatalog(knex: Knex): Promise<MaterialCatalog
     });
     const newId = Number((inserted as unknown as number[])[0]);
     categoryIdBySlug.set(cat.slug, newId);
+    existingCategoryNames.add(cat.name.toLowerCase());
     categoriesInserted += 1;
   }
 
