@@ -18,6 +18,7 @@ interface SettingRow {
   vote_score: number;
   view_count: number;
   primary_image_card?: string | null;
+  source_format?: 'xcs' | 'xs' | null;
 }
 
 interface SearchResponse {
@@ -134,6 +135,16 @@ export default function SearchPage() {
                   <option key={o.id} value={o.id}>{o.name}</option>
                 ))}
               </select>
+            </label>
+
+            <h2>Quick filters</h2>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={params.get('has_image') === '1'}
+                onChange={(e) => setParam('has_image', e.target.checked ? '1' : '')}
+              />
+              Has image
             </label>
 
             <h2>Sort</h2>

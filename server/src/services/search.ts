@@ -133,6 +133,7 @@ export function buildSearchQuery(
     's.view_count',
     's.comment_count',
     's.result_image_url',
+    's.source_format',
     's.status',
     's.created_at',
     's.submitted_by',

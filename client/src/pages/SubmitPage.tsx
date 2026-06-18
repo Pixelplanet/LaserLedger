@@ -53,6 +53,10 @@ export default function SubmitPage() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [parsing, setParsing] = useState(false);
   const [xcsProgress, setXcsProgress] = useState<UploadProgressState | null>(null);
+  const [sourceXcs, setSourceXcs] = useState<string | null>(null);
+  const [sourceFormat, setSourceFormat] = useState<'xcs' | 'xs' | null>(null);
+  const [images, setImages] = useState<File[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   async function onXcsFile(file: File) {
     setErr(null);
@@ -60,6 +64,7 @@ export default function SubmitPage() {
     setXcsProgress(null);
     setParsing(true);
     try {
+      // Start parse first (main flow — mocked in tests)
       const p = await uploadFileWithProgress<ParseResp>('/api/settings/parse-xcs', 'file', file, setXcsProgress);
       const parsed = p.parsed as Record<string, unknown>;
       const firstLayer = Array.isArray(p.parsed.layers) ? p.parsed.layers[0] ?? {} : {};
@@ -78,7 +83,27 @@ export default function SubmitPage() {
         scan_mode: typeof firstLayer.scan_mode === 'string' ? firstLayer.scan_mode : typeof parsed.scan_mode === 'string' ? parsed.scan_mode : f.scan_mode,
       }));
       setWarnings(p.warnings ?? []);
+
+      // Best-effort raw file read for preservation (text for .xcs, base64 for .xs ZIP)
+      const isXs = file.name.endsWith('.xs') || file.type === 'application/zip';
+      try {
+        const raw = isXs
+          ? await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve((reader.result as string).split(',')[1]!);
+              reader.onerror = () => reject(new Error('Failed to read file'));
+              reader.readAsDataURL(file);
+            })
+          : await file.text();
+        setSourceXcs(raw);
+        setSourceFormat(isXs ? 'xs' : 'xcs');
+      } catch {
+        setSourceXcs(null);
+        setSourceFormat(null);
+      }
     } catch (e) {
+      setSourceXcs(null);
+      setSourceFormat(null);
       setErr(e instanceof Error ? e.message : 'XCS parse failed');
     } finally {
       setParsing(false);
@@ -87,7 +112,6 @@ export default function SubmitPage() {
 
   const create = useMutation({
     mutationFn: (body: Record<string, unknown>) => api<CreateResp>('/settings', { method: 'POST', body }),
-    onSuccess: (res) => nav(`/settings/${res.uuid}/edit`),
     onError: (e) => setErr(e instanceof ApiError ? e.message : 'Submission failed'),
   });
 
@@ -101,7 +125,7 @@ export default function SubmitPage() {
     return Number.isFinite(n) ? n : null;
   }
 
-  function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setErr(null);
     if (!form.device_id || !form.laser_type_id || !form.material_id || !form.operation_type_id) {
@@ -109,25 +133,56 @@ export default function SubmitPage() {
       return;
     }
     const tags = form.tags.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 20);
-    create.mutate({
-      title: form.title.trim(),
-      description: form.description.trim() || null,
-      device_id: Number(form.device_id),
-      laser_type_id: Number(form.laser_type_id),
-      material_id: Number(form.material_id),
-      operation_type_id: Number(form.operation_type_id),
-      power: num(form.power),
-      speed: num(form.speed),
-      passes: num(form.passes) ?? 1,
-      frequency: num(form.frequency),
-      lpi: num(form.lpi),
-      pulse_width: num(form.pulse_width),
-      focus_offset: num(form.focus_offset),
-      scan_mode: form.scan_mode || null,
-      quality_rating: num(form.quality_rating),
-      result_description: form.result_description.trim() || null,
-      tags,
-    });
+    try {
+      const body: Record<string, unknown> = {
+        title: form.title.trim(),
+        description: form.description.trim() || null,
+        device_id: Number(form.device_id),
+        laser_type_id: Number(form.laser_type_id),
+        material_id: Number(form.material_id),
+        operation_type_id: Number(form.operation_type_id),
+        power: num(form.power),
+        speed: num(form.speed),
+        passes: num(form.passes) ?? 1,
+        frequency: num(form.frequency),
+        lpi: num(form.lpi),
+        pulse_width: num(form.pulse_width),
+        focus_offset: num(form.focus_offset),
+        scan_mode: form.scan_mode || null,
+        quality_rating: num(form.quality_rating),
+        result_description: form.result_description.trim() || null,
+        tags,
+      };
+      if (sourceXcs) {
+        body.source_xcs = sourceXcs;
+        body.source_format = sourceFormat;
+      }
+      const created = await create.mutateAsync(body);
+      // Upload result images if any (best-effort after creation)
+      if (images.length > 0) {
+        setUploadingImages(true);
+        for (const file of images) {
+          const fd = new FormData();
+          fd.append('image', file);
+          const res = await fetch(`/api/settings/${created.uuid}/images`, {
+            method: 'POST',
+            credentials: 'include',
+            body: fd,
+          });
+          if (!res.ok) {
+            const json = await res.json().catch(() => null);
+            throw new Error(json?.error?.message ?? `Image upload failed: ${file.name}`);
+          }
+        }
+      }
+      nav(`/settings/${created.uuid}/edit`);
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setErr(e.message);
+      } else {
+        setErr(e instanceof Error ? e.message : 'Submission failed');
+      }
+    }
   }
 
   return (
@@ -237,12 +292,33 @@ export default function SubmitPage() {
           <input value={form.tags} onChange={(e) => set('tags', e.target.value)} placeholder="anodized, deep-engrave, monochrome" />
         </label>
 
+        <label>
+          Result images (test grid photos, up to 5)
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            disabled={create.isPending || uploadingImages}
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? []);
+              setImages((prev) => [...prev, ...files].slice(0, 5));
+              e.target.value = '';
+            }}
+          />
+        </label>
+        {images.length > 0 && (
+          <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span>{images.length} image{images.length > 1 ? 's' : ''} selected: {images.map((f) => f.name).join(', ')}</span>
+            <button type="button" className="btn sm" onClick={() => setImages([])}>Clear</button>
+          </div>
+        )}
+
         {err && <p className="err">{err}</p>}
         <div className="toolbar">
-          <Button type="submit" variant="primary" size="sm" disabled={create.isPending}>
-            {create.isPending ? 'Submitting…' : 'Submit for review'}
+          <Button type="submit" variant="primary" size="sm" disabled={create.isPending || uploadingImages}>
+            {create.isPending || uploadingImages ? 'Submitting…' : 'Submit for review'}
           </Button>
-          <span className="hint">Your submission enters the moderation queue. After submit, you land on the edit screen so you can add images right away.</span>
+          <span className="hint">Your submission enters the moderation queue. You'll be taken to the edit screen where you can add more details.</span>
         </div>
       </form>
     </PageBlock>
